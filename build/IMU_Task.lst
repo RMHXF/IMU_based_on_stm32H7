@@ -1,0 +1,984 @@
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 1
+
+
+   1              		.cpu cortex-m7
+   2              		.arch armv7e-m
+   3              		.fpu fpv5-d16
+   4              		.eabi_attribute 28, 1
+   5              		.eabi_attribute 20, 1
+   6              		.eabi_attribute 21, 1
+   7              		.eabi_attribute 23, 3
+   8              		.eabi_attribute 24, 1
+   9              		.eabi_attribute 25, 1
+  10              		.eabi_attribute 26, 1
+  11              		.eabi_attribute 30, 1
+  12              		.eabi_attribute 34, 1
+  13              		.eabi_attribute 18, 4
+  14              		.file	"IMU_Task.c"
+  15              		.text
+  16              	.Ltext0:
+  17              		.cfi_sections	.debug_frame
+  18              		.file 1 "Application/Src/IMU_Task.c"
+  19              		.section	.text.IMU_Init,"ax",%progbits
+  20              		.align	1
+  21              		.global	IMU_Init
+  22              		.syntax unified
+  23              		.thumb
+  24              		.thumb_func
+  26              	IMU_Init:
+  27              	.LFB149:
+   1:Application/Src/IMU_Task.c **** /**
+   2:Application/Src/IMU_Task.c ****  *******************************************************************************
+   3:Application/Src/IMU_Task.c ****  * @file        IMU_Task.c
+   4:Application/Src/IMU_Task.c ****  * @brief       IMU姿态解算任务 - 实现
+   5:Application/Src/IMU_Task.c ****  * @details     基于Mahony互补滤波器的IMU姿态解算方案
+   6:Application/Src/IMU_Task.c ****  *
+   7:Application/Src/IMU_Task.c ****  *  系统工作流程
+   8:Application/Src/IMU_Task.c ****  *  ============
+   9:Application/Src/IMU_Task.c ****  *  1. 上电 → IMU_Init() 初始化PID、启动PWM加热、等待传感器就绪
+  10:Application/Src/IMU_Task.c ****  *  2. 以 1kHz 循环执行：
+  11:Application/Src/IMU_Task.c ****  *     a) IMU_temp_Ctrl()       — 每 300ms 一次温度PID控制
+  12:Application/Src/IMU_Task.c ****  *     b) Gyro_Init()           — 前 1000ms 采集零偏均值
+  13:Application/Src/IMU_Task.c ****  *     c) IMU_Data_Read()       — 读取传感器 → 减零偏 → Mahony解算姿态角
+  14:Application/Src/IMU_Task.c ****  *  3. 校准完成后，roll/pitch/yaw 姿态角开始更新
+  15:Application/Src/IMU_Task.c ****  *
+  16:Application/Src/IMU_Task.c ****  *  关键数据结构
+  17:Application/Src/IMU_Task.c ****  *  ============
+  18:Application/Src/IMU_Task.c ****  *  - IMU_Data:    存储加速度、陀螺仪、温度、姿态角（roll/pitch/yaw）
+  19:Application/Src/IMU_Task.c ****  *  - MahonyAHRS:  Mahony互补滤波器状态（四元数 + 中间变量）
+  20:Application/Src/IMU_Task.c ****  *  - gyro_init:   陀螺仪三轴零偏值，校准完成后不再变化
+  21:Application/Src/IMU_Task.c ****  *  - pid_temp:    温度PID控制器实例
+  22:Application/Src/IMU_Task.c ****  *******************************************************************************
+  23:Application/Src/IMU_Task.c ****  */
+  24:Application/Src/IMU_Task.c **** #include "IMU_Task.h"
+  25:Application/Src/IMU_Task.c **** 
+  26:Application/Src/IMU_Task.c **** /*============================================================================
+  27:Application/Src/IMU_Task.c ****  * 陀螺仪校准状态宏
+  28:Application/Src/IMU_Task.c ****  *============================================================================*/
+  29:Application/Src/IMU_Task.c **** #define Gyro_Init_Flag 0    /**< 校准中：累加原始数据计算零偏均值       */
+  30:Application/Src/IMU_Task.c **** #define Gyro_Read_Flag 1    /**< 校准完成：正常运行，使用修正后数据     */
+  31:Application/Src/IMU_Task.c **** 
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 2
+
+
+  32:Application/Src/IMU_Task.c **** /*============================================================================
+  33:Application/Src/IMU_Task.c ****  * 全局变量
+  34:Application/Src/IMU_Task.c ****  *============================================================================*/
+  35:Application/Src/IMU_Task.c **** Mahony_t    MahonyAHRS    = {0};           /**< Mahony滤波器状态结构体         */
+  36:Application/Src/IMU_Task.c **** IMU_Data_t  IMU_Data      = {0};           /**< IMU传感器数据与姿态角          */
+  37:Application/Src/IMU_Task.c **** float       gyro_init[3]  = {0};           /**< 陀螺仪三轴零偏值              */
+  38:Application/Src/IMU_Task.c **** pid_type_def pid_temp;                      /**< 温度PID控制器                 */
+  39:Application/Src/IMU_Task.c **** justfloat_t IMU_jf;
+  40:Application/Src/IMU_Task.c **** float       pid_temp_args[3] = {            /**< 温度PID参数 {Kp, Ki, Kd}      */
+  41:Application/Src/IMU_Task.c ****     100.0f,                                 /**< 比例系数                      */
+  42:Application/Src/IMU_Task.c ****     50.0f,                                  /**< 积分系数                      */
+  43:Application/Src/IMU_Task.c ****     12.0f                                   /**< 微分系数                      */
+  44:Application/Src/IMU_Task.c **** };
+  45:Application/Src/IMU_Task.c **** 
+  46:Application/Src/IMU_Task.c **** /*============================================================================
+  47:Application/Src/IMU_Task.c ****  * 调试标志
+  48:Application/Src/IMU_Task.c ****  *============================================================================*/
+  49:Application/Src/IMU_Task.c **** #define DEBUG 1
+  50:Application/Src/IMU_Task.c **** #if DEBUG
+  51:Application/Src/IMU_Task.c **** int is_temp_err = 0;    /**< 温度异常标志（超温时置1） */
+  52:Application/Src/IMU_Task.c **** int is_err      = 0;    /**< 传感器离线标志（初始化失败时置1） */
+  53:Application/Src/IMU_Task.c **** #endif
+  54:Application/Src/IMU_Task.c **** 
+  55:Application/Src/IMU_Task.c **** /*============================================================================
+  56:Application/Src/IMU_Task.c ****  * 模块内部状态变量
+  57:Application/Src/IMU_Task.c ****  *============================================================================*/
+  58:Application/Src/IMU_Task.c **** uint8_t Init_Status = Gyro_Init_Flag;   /**< 陀螺仪校准状态，初值为"校准中" */
+  59:Application/Src/IMU_Task.c **** 
+  60:Application/Src/IMU_Task.c **** /**
+  61:Application/Src/IMU_Task.c ****  *******************************************************************************
+  62:Application/Src/IMU_Task.c ****  * @brief       IMU_Task - IMU主任务（RTOS线程入口）
+  63:Application/Src/IMU_Task.c ****  * @param       argument  RTOS线程参数（未使用）
+  64:Application/Src/IMU_Task.c ****  * @retval      void
+  65:Application/Src/IMU_Task.c ****  * @details     上电初始化后以1kHz频率循环执行温控、零偏校准和姿态解算。
+  66:Application/Src/IMU_Task.c ****  *              校准完成后（~1秒）姿态角开始正常输出。
+  67:Application/Src/IMU_Task.c ****  *******************************************************************************
+  68:Application/Src/IMU_Task.c ****  */
+  69:Application/Src/IMU_Task.c **** void IMU_Task(void *argument)
+  70:Application/Src/IMU_Task.c **** {
+  71:Application/Src/IMU_Task.c ****     IMU_Init();                             /* 传感器及外设初始化              */
+  72:Application/Src/IMU_Task.c ****     while (1)
+  73:Application/Src/IMU_Task.c ****     {
+  74:Application/Src/IMU_Task.c ****         osDelay(1);                         /* 1ms 周期 = 1kHz 控制/解算频率  */
+  75:Application/Src/IMU_Task.c ****         IMU_temp_Ctrl();                    /* 温度PID控制（内部300ms分频）    */
+  76:Application/Src/IMU_Task.c ****         Gyro_Init(&Init_Status);            /* 陀螺仪零偏校准状态机           */
+  77:Application/Src/IMU_Task.c ****         IMU_Data_Read();                    /* 读取传感器 + Mahony姿态解算    */
+  78:Application/Src/IMU_Task.c ****     }
+  79:Application/Src/IMU_Task.c **** }
+  80:Application/Src/IMU_Task.c **** 
+  81:Application/Src/IMU_Task.c **** /**
+  82:Application/Src/IMU_Task.c ****  *******************************************************************************
+  83:Application/Src/IMU_Task.c ****  * @brief       IMU_Init - IMU系统初始化
+  84:Application/Src/IMU_Task.c ****  * @param       void
+  85:Application/Src/IMU_Task.c ****  * @retval      void
+  86:Application/Src/IMU_Task.c ****  * @details     执行以下初始化步骤：
+  87:Application/Src/IMU_Task.c ****  *              1. 初始化温度PID控制器（位置式PID）
+  88:Application/Src/IMU_Task.c ****  *              2. 启动TIM3 CH4 PWM输出（加热元件驱动）
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 3
+
+
+  89:Application/Src/IMU_Task.c ****  *              3. 等待2秒让BMI088传感器内部上电稳定
+  90:Application/Src/IMU_Task.c ****  *              4. 配置Mahony滤波器采样频率为1kHz
+  91:Application/Src/IMU_Task.c ****  *              5. 检测BMI088在线状态，若离线则循环重试（间隔1秒）
+  92:Application/Src/IMU_Task.c ****  *******************************************************************************
+  93:Application/Src/IMU_Task.c ****  */
+  94:Application/Src/IMU_Task.c **** void IMU_Init(void)
+  95:Application/Src/IMU_Task.c **** {
+  28              		.loc 1 95 1 view -0
+  29              		.cfi_startproc
+  30              		@ args = 0, pretend = 0, frame = 0
+  31              		@ frame_needed = 0, uses_anonymous_args = 0
+  32 0000 08B5     		push	{r3, lr}
+  33              	.LCFI0:
+  34              		.cfi_def_cfa_offset 8
+  35              		.cfi_offset 3, -8
+  36              		.cfi_offset 14, -4
+  96:Application/Src/IMU_Task.c ****     /* ---- 初始化温度PID控制器 ---- */
+  97:Application/Src/IMU_Task.c ****     PID_init(&pid_temp, PID_POSITION, pid_temp_args, 500.0f, 200.0f);
+  37              		.loc 1 97 5 view .LVU1
+  38 0002 DFED100A 		vldr.32	s1, .L5
+  39 0006 9FED100A 		vldr.32	s0, .L5+4
+  40 000a 104A     		ldr	r2, .L5+8
+  41 000c 0021     		movs	r1, #0
+  42 000e 1048     		ldr	r0, .L5+12
+  43 0010 FFF7FEFF 		bl	PID_init
+  44              	.LVL0:
+  98:Application/Src/IMU_Task.c **** 
+  99:Application/Src/IMU_Task.c ****     /* ---- 启动加热PWM输出 ---- */
+ 100:Application/Src/IMU_Task.c ****     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+  45              		.loc 1 100 5 view .LVU2
+  46 0014 0C21     		movs	r1, #12
+  47 0016 0F48     		ldr	r0, .L5+16
+  48 0018 FFF7FEFF 		bl	HAL_TIM_PWM_Start
+  49              	.LVL1:
+ 101:Application/Src/IMU_Task.c **** 
+ 102:Application/Src/IMU_Task.c ****     /* ---- 等待传感器上电稳定（2秒） ---- */
+ 103:Application/Src/IMU_Task.c ****     osDelay(2000);
+  50              		.loc 1 103 5 view .LVU3
+  51 001c 4FF4FA60 		mov	r0, #2000
+  52 0020 FFF7FEFF 		bl	osDelay
+  53              	.LVL2:
+ 104:Application/Src/IMU_Task.c **** 
+ 105:Application/Src/IMU_Task.c ****     /* ---- 配置Mahony滤波器采样频率 ---- */
+ 106:Application/Src/IMU_Task.c ****     MahonyAHRS.invSampleFreq = 1 / 1000.0f;    /* 1kHz = 1ms 采样周期 */
+  54              		.loc 1 106 5 view .LVU4
+  55              		.loc 1 106 30 is_stmt 0 view .LVU5
+  56 0024 0C4B     		ldr	r3, .L5+20
+  57 0026 0D4A     		ldr	r2, .L5+24
+  58 0028 1A62     		str	r2, [r3, #32]	@ float
+ 107:Application/Src/IMU_Task.c **** 
+ 108:Application/Src/IMU_Task.c ****     /* ---- BMI088在线检测 ---- */
+ 109:Application/Src/IMU_Task.c ****     while (BMI088_init())
+  59              		.loc 1 109 5 is_stmt 1 view .LVU6
+  60              		.loc 1 109 11 is_stmt 0 view .LVU7
+  61 002a 06E0     		b	.L2
+  62              	.L3:
+ 110:Application/Src/IMU_Task.c ****     {
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 4
+
+
+ 111:Application/Src/IMU_Task.c ****         is_err = 1;                             /* 置位离线标志 */
+  63              		.loc 1 111 9 is_stmt 1 view .LVU8
+  64              		.loc 1 111 16 is_stmt 0 view .LVU9
+  65 002c 0C4B     		ldr	r3, .L5+28
+  66 002e 0122     		movs	r2, #1
+  67 0030 1A60     		str	r2, [r3]
+ 112:Application/Src/IMU_Task.c ****         osDelay(1000);                          /* 每隔1秒重试   */
+  68              		.loc 1 112 9 is_stmt 1 view .LVU10
+  69 0032 4FF47A70 		mov	r0, #1000
+  70 0036 FFF7FEFF 		bl	osDelay
+  71              	.LVL3:
+  72              	.L2:
+ 109:Application/Src/IMU_Task.c ****     {
+  73              		.loc 1 109 12 view .LVU11
+  74 003a FFF7FEFF 		bl	BMI088_init
+  75              	.LVL4:
+ 109:Application/Src/IMU_Task.c ****     {
+  76              		.loc 1 109 12 is_stmt 0 discriminator 1 view .LVU12
+  77 003e 0028     		cmp	r0, #0
+  78 0040 F4D1     		bne	.L3
+ 113:Application/Src/IMU_Task.c ****     }
+ 114:Application/Src/IMU_Task.c **** }
+  79              		.loc 1 114 1 view .LVU13
+  80 0042 08BD     		pop	{r3, pc}
+  81              	.L6:
+  82              		.align	2
+  83              	.L5:
+  84 0044 00004843 		.word	1128792064
+  85 0048 0000FA43 		.word	1140457472
+  86 004c 00000000 		.word	pid_temp_args
+  87 0050 00000000 		.word	pid_temp
+  88 0054 00000000 		.word	htim3
+  89 0058 00000000 		.word	MahonyAHRS
+  90 005c 6F12833A 		.word	981668463
+  91 0060 00000000 		.word	is_err
+  92              		.cfi_endproc
+  93              	.LFE149:
+  95              		.section	.text.IMU_temp_Ctrl,"ax",%progbits
+  96              		.align	1
+  97              		.global	IMU_temp_Ctrl
+  98              		.syntax unified
+  99              		.thumb
+ 100              		.thumb_func
+ 102              	IMU_temp_Ctrl:
+ 103              	.LFB150:
+ 115:Application/Src/IMU_Task.c **** 
+ 116:Application/Src/IMU_Task.c **** /**
+ 117:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 118:Application/Src/IMU_Task.c ****  * @brief       IMU_temp_Ctrl - IMU温度PID控制
+ 119:Application/Src/IMU_Task.c ****  * @param       void
+ 120:Application/Src/IMU_Task.c ****  * @retval      void
+ 121:Application/Src/IMU_Task.c ****  * @details     每300ms执行一次：
+ 122:Application/Src/IMU_Task.c ****  *              1. 通过BMI088读取当前温度
+ 123:Application/Src/IMU_Task.c ****  *              2. 若温度超过 IMU_TEMP_LIMIT 阈值：
+ 124:Application/Src/IMU_Task.c ****  *                 - 清除PID积分项，防止积分饱和
+ 125:Application/Src/IMU_Task.c ****  *                 - 关闭加热PWM输出（CCR4 = 0）
+ 126:Application/Src/IMU_Task.c ****  *                 - 置位错误标志，跳过本次PID计算
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 5
+
+
+ 127:Application/Src/IMU_Task.c ****  *              3. 正常时：执行PID计算，将输出绝对值写入PWM比较寄存器
+ 128:Application/Src/IMU_Task.c ****  *
+ 129:Application/Src/IMU_Task.c ****  * @note        BMI088_read 会同时更新 IMU_Data.gyro 和 IMU_Data.accel，
+ 130:Application/Src/IMU_Task.c ****  *              作为副作用为后续的 Gyro_Init 提供最新的原始传感器数据
+ 131:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 132:Application/Src/IMU_Task.c ****  */
+ 133:Application/Src/IMU_Task.c **** void IMU_temp_Ctrl(void)
+ 134:Application/Src/IMU_Task.c **** {
+ 104              		.loc 1 134 1 is_stmt 1 view -0
+ 105              		.cfi_startproc
+ 106              		@ args = 0, pretend = 0, frame = 0
+ 107              		@ frame_needed = 0, uses_anonymous_args = 0
+ 108 0000 08B5     		push	{r3, lr}
+ 109              	.LCFI1:
+ 110              		.cfi_def_cfa_offset 8
+ 111              		.cfi_offset 3, -8
+ 112              		.cfi_offset 14, -4
+ 135:Application/Src/IMU_Task.c ****     static int cnt = 0;                     /* 分频计数器（1ms → 300ms）       */
+ 113              		.loc 1 135 5 view .LVU15
+ 136:Application/Src/IMU_Task.c ****     cnt++;
+ 114              		.loc 1 136 5 view .LVU16
+ 115              		.loc 1 136 8 is_stmt 0 view .LVU17
+ 116 0002 234A     		ldr	r2, .L16
+ 117 0004 1368     		ldr	r3, [r2]
+ 118 0006 0133     		adds	r3, r3, #1
+ 119 0008 1360     		str	r3, [r2]
+ 137:Application/Src/IMU_Task.c ****     if (cnt == 300)                         /* 每300ms执行一次温度控制        */
+ 120              		.loc 1 137 5 is_stmt 1 view .LVU18
+ 121              		.loc 1 137 8 is_stmt 0 view .LVU19
+ 122 000a B3F5967F 		cmp	r3, #300
+ 123 000e 00D0     		beq	.L14
+ 124              	.L7:
+ 138:Application/Src/IMU_Task.c ****     {
+ 139:Application/Src/IMU_Task.c ****         /* ---- 读取传感器数据（主要获取温度） ---- */
+ 140:Application/Src/IMU_Task.c ****         BMI088_read(IMU_Data.gyro, IMU_Data.accel, &IMU_Data.temp);
+ 141:Application/Src/IMU_Task.c **** 
+ 142:Application/Src/IMU_Task.c ****         /* ---- 过温保护 ---- */
+ 143:Application/Src/IMU_Task.c ****         if (IMU_Data.temp >= IMU_TEMP_LIMIT)
+ 144:Application/Src/IMU_Task.c ****         {
+ 145:Application/Src/IMU_Task.c ****             PID_clear(&pid_temp);           /* 清除PID历史状态（防积分饱和）   */
+ 146:Application/Src/IMU_Task.c ****             is_temp_err = 1;                /* 置位过温标志                    */
+ 147:Application/Src/IMU_Task.c ****             htim3.Instance->CCR4 = 0;       /* 关闭加热PWM输出                 */
+ 148:Application/Src/IMU_Task.c ****             cnt = 0;                        /* 重置分频计数器                  */
+ 149:Application/Src/IMU_Task.c ****             return;                         /* 跳过本次PID计算                 */
+ 150:Application/Src/IMU_Task.c ****         }
+ 151:Application/Src/IMU_Task.c **** 
+ 152:Application/Src/IMU_Task.c ****         /* ---- 正常温度控制 ---- */
+ 153:Application/Src/IMU_Task.c ****         PID_calc(&pid_temp, IMU_Data.temp, IMU_TEMP_SET);
+ 154:Application/Src/IMU_Task.c ****         htim3.Instance->CCR4 = fabs(pid_temp.out);   /* 更新加热PWM占空比      */
+ 155:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 156:Application/Src/IMU_Task.c ****         Jf_transmit(&IMU_jf,IMU_Data.temp,pid_temp.error[0],pid_temp.Pout,pid_temp.Iout);
+ 157:Application/Src/IMU_Task.c ****     }
+ 158:Application/Src/IMU_Task.c **** }
+ 125              		.loc 1 158 1 view .LVU20
+ 126 0010 08BD     		pop	{r3, pc}
+ 127              	.L14:
+ 140:Application/Src/IMU_Task.c **** 
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 6
+
+
+ 128              		.loc 1 140 9 is_stmt 1 view .LVU21
+ 129 0012 204A     		ldr	r2, .L16+4
+ 130 0014 A2F10C01 		sub	r1, r2, #12
+ 131 0018 A1F10C00 		sub	r0, r1, #12
+ 132 001c FFF7FEFF 		bl	BMI088_read
+ 133              	.LVL5:
+ 143:Application/Src/IMU_Task.c ****         {
+ 134              		.loc 1 143 9 view .LVU22
+ 143:Application/Src/IMU_Task.c ****         {
+ 135              		.loc 1 143 21 is_stmt 0 view .LVU23
+ 136 0020 1D4B     		ldr	r3, .L16+8
+ 137 0022 93ED060A 		vldr.32	s0, [r3, #24]
+ 143:Application/Src/IMU_Task.c ****         {
+ 138              		.loc 1 143 12 view .LVU24
+ 139 0026 DFED1D7A 		vldr.32	s15, .L16+12
+ 140 002a B4EEE70A 		vcmpe.f32	s0, s15
+ 141 002e F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 142 0032 1FDA     		bge	.L15
+ 153:Application/Src/IMU_Task.c ****         htim3.Instance->CCR4 = fabs(pid_temp.out);   /* 更新加热PWM占空比      */
+ 143              		.loc 1 153 9 is_stmt 1 view .LVU25
+ 144 0034 DFED1A0A 		vldr.32	s1, .L16+16
+ 145 0038 1A48     		ldr	r0, .L16+20
+ 146 003a FFF7FEFF 		bl	PID_calc
+ 147              	.LVL6:
+ 154:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 148              		.loc 1 154 9 view .LVU26
+ 154:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 149              		.loc 1 154 45 is_stmt 0 view .LVU27
+ 150 003e 1949     		ldr	r1, .L16+20
+ 151 0040 D1ED087A 		vldr.32	s15, [r1, #32]
+ 154:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 152              		.loc 1 154 32 view .LVU28
+ 153 0044 F0EEE77A 		vabs.f32	s15, s15
+ 154:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 154              		.loc 1 154 14 view .LVU29
+ 155 0048 174B     		ldr	r3, .L16+24
+ 156 004a 1B68     		ldr	r3, [r3]
+ 154:Application/Src/IMU_Task.c ****         cnt = 0;                            /* 重置分频计数器                  */
+ 157              		.loc 1 154 30 view .LVU30
+ 158 004c FCEEE77A 		vcvt.u32.f32	s15, s15
+ 159 0050 C3ED107A 		vstr.32	s15, [r3, #64]	@ int
+ 155:Application/Src/IMU_Task.c ****         Jf_transmit(&IMU_jf,IMU_Data.temp,pid_temp.error[0],pid_temp.Pout,pid_temp.Iout);
+ 160              		.loc 1 155 9 is_stmt 1 view .LVU31
+ 155:Application/Src/IMU_Task.c ****         Jf_transmit(&IMU_jf,IMU_Data.temp,pid_temp.error[0],pid_temp.Pout,pid_temp.Iout);
+ 161              		.loc 1 155 13 is_stmt 0 view .LVU32
+ 162 0054 0E4B     		ldr	r3, .L16
+ 163 0056 0022     		movs	r2, #0
+ 164 0058 1A60     		str	r2, [r3]
+ 156:Application/Src/IMU_Task.c ****     }
+ 165              		.loc 1 156 9 is_stmt 1 view .LVU33
+ 166 005a D1ED0A1A 		vldr.32	s3, [r1, #40]
+ 167 005e 91ED091A 		vldr.32	s2, [r1, #36]
+ 168 0062 D1ED0F0A 		vldr.32	s1, [r1, #60]
+ 169 0066 0C4B     		ldr	r3, .L16+8
+ 170 0068 93ED060A 		vldr.32	s0, [r3, #24]
+ 171 006c 0F48     		ldr	r0, .L16+28
+ 172 006e FFF7FEFF 		bl	Jf_transmit
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 7
+
+
+ 173              	.LVL7:
+ 174 0072 CDE7     		b	.L7
+ 175              	.L15:
+ 145:Application/Src/IMU_Task.c ****             is_temp_err = 1;                /* 置位过温标志                    */
+ 176              		.loc 1 145 13 view .LVU34
+ 177 0074 0B48     		ldr	r0, .L16+20
+ 178 0076 FFF7FEFF 		bl	PID_clear
+ 179              	.LVL8:
+ 146:Application/Src/IMU_Task.c ****             htim3.Instance->CCR4 = 0;       /* 关闭加热PWM输出                 */
+ 180              		.loc 1 146 13 view .LVU35
+ 146:Application/Src/IMU_Task.c ****             htim3.Instance->CCR4 = 0;       /* 关闭加热PWM输出                 */
+ 181              		.loc 1 146 25 is_stmt 0 view .LVU36
+ 182 007a 0D4B     		ldr	r3, .L16+32
+ 183 007c 0122     		movs	r2, #1
+ 184 007e 1A60     		str	r2, [r3]
+ 147:Application/Src/IMU_Task.c ****             cnt = 0;                        /* 重置分频计数器                  */
+ 185              		.loc 1 147 13 is_stmt 1 view .LVU37
+ 147:Application/Src/IMU_Task.c ****             cnt = 0;                        /* 重置分频计数器                  */
+ 186              		.loc 1 147 18 is_stmt 0 view .LVU38
+ 187 0080 094B     		ldr	r3, .L16+24
+ 188 0082 1A68     		ldr	r2, [r3]
+ 147:Application/Src/IMU_Task.c ****             cnt = 0;                        /* 重置分频计数器                  */
+ 189              		.loc 1 147 34 view .LVU39
+ 190 0084 0023     		movs	r3, #0
+ 191 0086 1364     		str	r3, [r2, #64]
+ 148:Application/Src/IMU_Task.c ****             return;                         /* 跳过本次PID计算                 */
+ 192              		.loc 1 148 13 is_stmt 1 view .LVU40
+ 148:Application/Src/IMU_Task.c ****             return;                         /* 跳过本次PID计算                 */
+ 193              		.loc 1 148 17 is_stmt 0 view .LVU41
+ 194 0088 014A     		ldr	r2, .L16
+ 195 008a 1360     		str	r3, [r2]
+ 149:Application/Src/IMU_Task.c ****         }
+ 196              		.loc 1 149 13 is_stmt 1 view .LVU42
+ 197 008c C0E7     		b	.L7
+ 198              	.L17:
+ 199 008e 00BF     		.align	2
+ 200              	.L16:
+ 201 0090 00000000 		.word	cnt.1
+ 202 0094 18000000 		.word	IMU_Data+24
+ 203 0098 00000000 		.word	IMU_Data
+ 204 009c 00007042 		.word	1114636288
+ 205 00a0 00003C42 		.word	1111228416
+ 206 00a4 00000000 		.word	pid_temp
+ 207 00a8 00000000 		.word	htim3
+ 208 00ac 00000000 		.word	IMU_jf
+ 209 00b0 00000000 		.word	is_temp_err
+ 210              		.cfi_endproc
+ 211              	.LFE150:
+ 213              		.section	.text.IMU_Data_Read,"ax",%progbits
+ 214              		.align	1
+ 215              		.global	IMU_Data_Read
+ 216              		.syntax unified
+ 217              		.thumb
+ 218              		.thumb_func
+ 220              	IMU_Data_Read:
+ 221              	.LFB151:
+ 159:Application/Src/IMU_Task.c **** 
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 8
+
+
+ 160:Application/Src/IMU_Task.c **** /**
+ 161:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 162:Application/Src/IMU_Task.c ****  * @brief       IMU_Data_Read - 读取IMU数据并解算姿态角
+ 163:Application/Src/IMU_Task.c ****  * @param       void
+ 164:Application/Src/IMU_Task.c ****  * @retval      void
+ 165:Application/Src/IMU_Task.c ****  * @details     每个采样周期（1kHz）执行：
+ 166:Application/Src/IMU_Task.c ****  *              1. 读取BMI088加速度计和陀螺仪原始数据
+ 167:Application/Src/IMU_Task.c ****  *              2. 首次调用时使用当前加速度计数据初始化Mahony滤波器
+ 168:Application/Src/IMU_Task.c ****  *              3. 减去陀螺仪零偏值（gyro_init[]），并对Z轴做死区滤波
+ 169:Application/Src/IMU_Task.c ****  *              4. 执行Mahony互补滤波更新（融合陀螺仪+加速度计）
+ 170:Application/Src/IMU_Task.c ****  *              5. 计算欧拉角（roll/pitch/yaw）
+ 171:Application/Src/IMU_Task.c ****  *              6. 仅在零偏校准完成后输出姿态角到 IMU_Data
+ 172:Application/Src/IMU_Task.c ****  *
+ 173:Application/Src/IMU_Task.c ****  * @note        Z轴死区阈值 0.012 rad/s ≈ 0.69°/s，用于抑制静态噪声
+ 174:Application/Src/IMU_Task.c ****  * @note        yaw 加 180° 将范围从 [-180°, 180°] 映射到 [0°, 360°]
+ 175:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 176:Application/Src/IMU_Task.c ****  */
+ 177:Application/Src/IMU_Task.c **** void IMU_Data_Read(void)
+ 178:Application/Src/IMU_Task.c **** {
+ 222              		.loc 1 178 1 view -0
+ 223              		.cfi_startproc
+ 224              		@ args = 0, pretend = 0, frame = 0
+ 225              		@ frame_needed = 0, uses_anonymous_args = 0
+ 226 0000 10B5     		push	{r4, lr}
+ 227              	.LCFI2:
+ 228              		.cfi_def_cfa_offset 8
+ 229              		.cfi_offset 4, -8
+ 230              		.cfi_offset 14, -4
+ 179:Application/Src/IMU_Task.c ****     /* ---- 读取BMI088原始数据 ---- */
+ 180:Application/Src/IMU_Task.c ****     BMI088_read(IMU_Data.gyro, IMU_Data.accel, &IMU_Data.temp);
+ 231              		.loc 1 180 5 view .LVU44
+ 232 0002 344A     		ldr	r2, .L27
+ 233 0004 A2F10C01 		sub	r1, r2, #12
+ 234 0008 A2F11800 		sub	r0, r2, #24
+ 235 000c FFF7FEFF 		bl	BMI088_read
+ 236              	.LVL9:
+ 181:Application/Src/IMU_Task.c **** 
+ 182:Application/Src/IMU_Task.c ****     /* ---- 首次调用时初始化Mahony姿态解算 ---- */
+ 183:Application/Src/IMU_Task.c ****     if (MahonyAHRS.is_Init == 0)
+ 237              		.loc 1 183 5 view .LVU45
+ 238              		.loc 1 183 19 is_stmt 0 view .LVU46
+ 239 0010 314B     		ldr	r3, .L27+4
+ 240 0012 93F93030 		ldrsb	r3, [r3, #48]
+ 241              		.loc 1 183 8 view .LVU47
+ 242 0016 002B     		cmp	r3, #0
+ 243 0018 39D0     		beq	.L25
+ 244              	.L19:
+ 184:Application/Src/IMU_Task.c ****     {
+ 185:Application/Src/IMU_Task.c ****         MahonyAHRS.is_Init = 1;
+ 186:Application/Src/IMU_Task.c ****         MahonyAHRS_init(IMU_Data.accel[0], IMU_Data.accel[1], IMU_Data.accel[2],
+ 187:Application/Src/IMU_Task.c ****                         0, 0, 0, &MahonyAHRS);
+ 188:Application/Src/IMU_Task.c ****     }
+ 189:Application/Src/IMU_Task.c **** 
+ 190:Application/Src/IMU_Task.c ****     /* ---- 应用陀螺仪零偏修正 ---- */
+ 191:Application/Src/IMU_Task.c ****     IMU_Data.gyro[0] -= gyro_init[0];
+ 245              		.loc 1 191 5 is_stmt 1 view .LVU48
+ 246              		.loc 1 191 18 is_stmt 0 view .LVU49
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 9
+
+
+ 247 001a 304B     		ldr	r3, .L27+8
+ 248 001c 93ED000A 		vldr.32	s0, [r3]
+ 249              		.loc 1 191 34 view .LVU50
+ 250 0020 2F4A     		ldr	r2, .L27+12
+ 251 0022 D2ED007A 		vldr.32	s15, [r2]
+ 252              		.loc 1 191 22 view .LVU51
+ 253 0026 30EE670A 		vsub.f32	s0, s0, s15
+ 254 002a 83ED000A 		vstr.32	s0, [r3]
+ 192:Application/Src/IMU_Task.c ****     IMU_Data.gyro[1] -= gyro_init[1];
+ 255              		.loc 1 192 5 is_stmt 1 view .LVU52
+ 256              		.loc 1 192 18 is_stmt 0 view .LVU53
+ 257 002e D3ED010A 		vldr.32	s1, [r3, #4]
+ 258              		.loc 1 192 34 view .LVU54
+ 259 0032 D2ED017A 		vldr.32	s15, [r2, #4]
+ 260              		.loc 1 192 22 view .LVU55
+ 261 0036 70EEE70A 		vsub.f32	s1, s1, s15
+ 262 003a C3ED010A 		vstr.32	s1, [r3, #4]
+ 193:Application/Src/IMU_Task.c ****     IMU_Data.gyro[2] -= gyro_init[2];
+ 263              		.loc 1 193 5 is_stmt 1 view .LVU56
+ 264              		.loc 1 193 18 is_stmt 0 view .LVU57
+ 265 003e D3ED027A 		vldr.32	s15, [r3, #8]
+ 266              		.loc 1 193 34 view .LVU58
+ 267 0042 92ED027A 		vldr.32	s14, [r2, #8]
+ 268              		.loc 1 193 22 view .LVU59
+ 269 0046 77EEC77A 		vsub.f32	s15, s15, s14
+ 270 004a C3ED027A 		vstr.32	s15, [r3, #8]
+ 194:Application/Src/IMU_Task.c **** 
+ 195:Application/Src/IMU_Task.c ****     /* ---- Z轴死区滤波：滤除微小角速度噪声 ---- */
+ 196:Application/Src/IMU_Task.c ****     if (fabsf(IMU_Data.gyro[2]) < 0.012f)
+ 271              		.loc 1 196 5 is_stmt 1 view .LVU60
+ 272              		.loc 1 196 9 is_stmt 0 view .LVU61
+ 273 004e F0EEE77A 		vabs.f32	s15, s15
+ 274              		.loc 1 196 8 view .LVU62
+ 275 0052 9FED247A 		vldr.32	s14, .L27+16
+ 276 0056 F4EEC77A 		vcmpe.f32	s15, s14
+ 277 005a F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 278 005e 01D5     		bpl	.L20
+ 197:Application/Src/IMU_Task.c ****     {
+ 198:Application/Src/IMU_Task.c ****         IMU_Data.gyro[2] = 0;
+ 279              		.loc 1 198 9 is_stmt 1 view .LVU63
+ 280              		.loc 1 198 26 is_stmt 0 view .LVU64
+ 281 0060 0022     		movs	r2, #0
+ 282 0062 9A60     		str	r2, [r3, #8]	@ float
+ 283              	.L20:
+ 199:Application/Src/IMU_Task.c ****     }
+ 200:Application/Src/IMU_Task.c **** 
+ 201:Application/Src/IMU_Task.c ****     /* ---- Mahony互补滤波：融合陀螺仪和加速度计数据 ---- */
+ 202:Application/Src/IMU_Task.c ****     MahonyAHRS_update(IMU_Data.gyro[0], IMU_Data.gyro[1], IMU_Data.gyro[2],
+ 284              		.loc 1 202 5 is_stmt 1 view .LVU65
+ 285 0064 1C4C     		ldr	r4, .L27+4
+ 286 0066 1D4B     		ldr	r3, .L27+8
+ 287 0068 2046     		mov	r0, r4
+ 288 006a D3ED052A 		vldr.32	s5, [r3, #20]
+ 289 006e 93ED042A 		vldr.32	s4, [r3, #16]
+ 290 0072 D3ED031A 		vldr.32	s3, [r3, #12]
+ 291 0076 93ED021A 		vldr.32	s2, [r3, #8]
+ 292 007a FFF7FEFF 		bl	MahonyAHRS_update
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 10
+
+
+ 293              	.LVL10:
+ 203:Application/Src/IMU_Task.c ****                       IMU_Data.accel[0], IMU_Data.accel[1], IMU_Data.accel[2],
+ 204:Application/Src/IMU_Task.c ****                       &MahonyAHRS);
+ 205:Application/Src/IMU_Task.c **** 
+ 206:Application/Src/IMU_Task.c ****     /* ---- 计算欧拉角 ---- */
+ 207:Application/Src/IMU_Task.c ****     Mahony_computeAngles(&MahonyAHRS);
+ 294              		.loc 1 207 5 view .LVU66
+ 295 007e 2046     		mov	r0, r4
+ 296 0080 FFF7FEFF 		bl	Mahony_computeAngles
+ 297              	.LVL11:
+ 208:Application/Src/IMU_Task.c **** 
+ 209:Application/Src/IMU_Task.c ****     /* ---- 仅在校准完成后更新姿态角输出 ---- */
+ 210:Application/Src/IMU_Task.c ****     if (Init_Status == Gyro_Read_Flag)
+ 298              		.loc 1 210 5 view .LVU67
+ 299              		.loc 1 210 21 is_stmt 0 view .LVU68
+ 300 0084 184B     		ldr	r3, .L27+20
+ 301 0086 1B78     		ldrb	r3, [r3]	@ zero_extendqisi2
+ 302              		.loc 1 210 8 view .LVU69
+ 303 0088 012B     		cmp	r3, #1
+ 304 008a 14D0     		beq	.L26
+ 305              	.L18:
+ 211:Application/Src/IMU_Task.c ****     {
+ 212:Application/Src/IMU_Task.c ****         IMU_Data.roll  = MahonyAHRS.roll_Mahony;
+ 213:Application/Src/IMU_Task.c ****         IMU_Data.pitch = MahonyAHRS.pitch_Mahony;
+ 214:Application/Src/IMU_Task.c ****         IMU_Data.yaw   = MahonyAHRS.yaw_Mahony + 180.0f;  /* 映射到 [0,360] */
+ 215:Application/Src/IMU_Task.c ****     }
+ 216:Application/Src/IMU_Task.c **** }
+ 306              		.loc 1 216 1 view .LVU70
+ 307 008c 10BD     		pop	{r4, pc}
+ 308              	.L25:
+ 185:Application/Src/IMU_Task.c ****         MahonyAHRS_init(IMU_Data.accel[0], IMU_Data.accel[1], IMU_Data.accel[2],
+ 309              		.loc 1 185 9 is_stmt 1 view .LVU71
+ 185:Application/Src/IMU_Task.c ****         MahonyAHRS_init(IMU_Data.accel[0], IMU_Data.accel[1], IMU_Data.accel[2],
+ 310              		.loc 1 185 28 is_stmt 0 view .LVU72
+ 311 008e 1248     		ldr	r0, .L27+4
+ 312 0090 0123     		movs	r3, #1
+ 313 0092 80F83030 		strb	r3, [r0, #48]
+ 186:Application/Src/IMU_Task.c ****                         0, 0, 0, &MahonyAHRS);
+ 314              		.loc 1 186 9 is_stmt 1 view .LVU73
+ 315 0096 DFED151A 		vldr.32	s3, .L27+24
+ 316 009a 104B     		ldr	r3, .L27+8
+ 317 009c F0EE612A 		vmov.f32	s5, s3
+ 318 00a0 B0EE612A 		vmov.f32	s4, s3
+ 319 00a4 93ED051A 		vldr.32	s2, [r3, #20]
+ 320 00a8 D3ED040A 		vldr.32	s1, [r3, #16]
+ 321 00ac 93ED030A 		vldr.32	s0, [r3, #12]
+ 322 00b0 FFF7FEFF 		bl	MahonyAHRS_init
+ 323              	.LVL12:
+ 324 00b4 B1E7     		b	.L19
+ 325              	.L26:
+ 212:Application/Src/IMU_Task.c ****         IMU_Data.pitch = MahonyAHRS.pitch_Mahony;
+ 326              		.loc 1 212 9 view .LVU74
+ 212:Application/Src/IMU_Task.c ****         IMU_Data.pitch = MahonyAHRS.pitch_Mahony;
+ 327              		.loc 1 212 36 is_stmt 0 view .LVU75
+ 328 00b6 616A     		ldr	r1, [r4, #36]	@ float
+ 212:Application/Src/IMU_Task.c ****         IMU_Data.pitch = MahonyAHRS.pitch_Mahony;
+ 329              		.loc 1 212 24 view .LVU76
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 11
+
+
+ 330 00b8 084B     		ldr	r3, .L27+8
+ 331 00ba D961     		str	r1, [r3, #28]	@ float
+ 213:Application/Src/IMU_Task.c ****         IMU_Data.yaw   = MahonyAHRS.yaw_Mahony + 180.0f;  /* 映射到 [0,360] */
+ 332              		.loc 1 213 9 is_stmt 1 view .LVU77
+ 213:Application/Src/IMU_Task.c ****         IMU_Data.yaw   = MahonyAHRS.yaw_Mahony + 180.0f;  /* 映射到 [0,360] */
+ 333              		.loc 1 213 36 is_stmt 0 view .LVU78
+ 334 00bc A16A     		ldr	r1, [r4, #40]	@ float
+ 213:Application/Src/IMU_Task.c ****         IMU_Data.yaw   = MahonyAHRS.yaw_Mahony + 180.0f;  /* 映射到 [0,360] */
+ 335              		.loc 1 213 24 view .LVU79
+ 336 00be 1962     		str	r1, [r3, #32]	@ float
+ 214:Application/Src/IMU_Task.c ****     }
+ 337              		.loc 1 214 9 is_stmt 1 view .LVU80
+ 214:Application/Src/IMU_Task.c ****     }
+ 338              		.loc 1 214 36 is_stmt 0 view .LVU81
+ 339 00c0 D4ED0B7A 		vldr.32	s15, [r4, #44]
+ 214:Application/Src/IMU_Task.c ****     }
+ 340              		.loc 1 214 48 view .LVU82
+ 341 00c4 9FED0A7A 		vldr.32	s14, .L27+28
+ 342 00c8 77EE877A 		vadd.f32	s15, s15, s14
+ 214:Application/Src/IMU_Task.c ****     }
+ 343              		.loc 1 214 24 view .LVU83
+ 344 00cc C3ED097A 		vstr.32	s15, [r3, #36]
+ 345              		.loc 1 216 1 view .LVU84
+ 346 00d0 DCE7     		b	.L18
+ 347              	.L28:
+ 348 00d2 00BF     		.align	2
+ 349              	.L27:
+ 350 00d4 18000000 		.word	IMU_Data+24
+ 351 00d8 00000000 		.word	MahonyAHRS
+ 352 00dc 00000000 		.word	IMU_Data
+ 353 00e0 00000000 		.word	gyro_init
+ 354 00e4 A69B443C 		.word	1011129254
+ 355 00e8 00000000 		.word	Init_Status
+ 356 00ec 00000000 		.word	0
+ 357 00f0 00003443 		.word	1127481344
+ 358              		.cfi_endproc
+ 359              	.LFE151:
+ 361              		.section	.text.Gyro_Init,"ax",%progbits
+ 362              		.align	1
+ 363              		.global	Gyro_Init
+ 364              		.syntax unified
+ 365              		.thumb
+ 366              		.thumb_func
+ 368              	Gyro_Init:
+ 369              	.LVL13:
+ 370              	.LFB152:
+ 217:Application/Src/IMU_Task.c **** 
+ 218:Application/Src/IMU_Task.c **** /**
+ 219:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 220:Application/Src/IMU_Task.c ****  * @brief       Gyro_Init - 陀螺仪上电零偏校准状态机
+ 221:Application/Src/IMU_Task.c ****  * @param       status  校准状态指针
+ 222:Application/Src/IMU_Task.c ****  *                      - 输入/输出：Gyro_Init_Flag → Gyro_Read_Flag
+ 223:Application/Src/IMU_Task.c ****  * @retval      void
+ 224:Application/Src/IMU_Task.c ****  * @details     两阶段状态机：
+ 225:Application/Src/IMU_Task.c ****  *
+ 226:Application/Src/IMU_Task.c ****  *              【校准阶段】status == Gyro_Init_Flag
+ 227:Application/Src/IMU_Task.c ****  *              - 累加 correct_Time_define 次陀螺仪原始数据到 gyro_init[]
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 12
+
+
+ 228:Application/Src/IMU_Task.c ****  *              - 累加满后除以采样次数，得到零偏平均值
+ 229:Application/Src/IMU_Task.c ****  *              - 将 *status 切换为 Gyro_Read_Flag，校准完成
+ 230:Application/Src/IMU_Task.c ****  *
+ 231:Application/Src/IMU_Task.c ****  *              【运行阶段】status == Gyro_Read_Flag
+ 232:Application/Src/IMU_Task.c ****  *              - 此函数不再执行任何操作
+ 233:Application/Src/IMU_Task.c ****  *              - 零偏修正已移至 IMU_Data_Read() 内部执行（Mahony更新前）
+ 234:Application/Src/IMU_Task.c ****  *
+ 235:Application/Src/IMU_Task.c ****  * @note        校准期间姿态角不更新（IMU_Data.roll/pitch/yaw 保持为0）
+ 236:Application/Src/IMU_Task.c ****  * @note        零偏修正不在此函数内进行，而是在 IMU_Data_Read 中减去 gyro_init[
+ 237:Application/Src/IMU_Task.c ****  *******************************************************************************
+ 238:Application/Src/IMU_Task.c ****  */
+ 239:Application/Src/IMU_Task.c **** void Gyro_Init(uint8_t *status)
+ 240:Application/Src/IMU_Task.c **** {
+ 371              		.loc 1 240 1 is_stmt 1 view -0
+ 372              		.cfi_startproc
+ 373              		@ args = 0, pretend = 0, frame = 0
+ 374              		@ frame_needed = 0, uses_anonymous_args = 0
+ 375              		@ link register save eliminated.
+ 241:Application/Src/IMU_Task.c ****     static int cnt = 0;                 /* 校准采样计数器                  */
+ 376              		.loc 1 241 5 view .LVU86
+ 242:Application/Src/IMU_Task.c **** 
+ 243:Application/Src/IMU_Task.c ****     if (*status == Gyro_Init_Flag)
+ 377              		.loc 1 243 5 view .LVU87
+ 378              		.loc 1 243 9 is_stmt 0 view .LVU88
+ 379 0000 0378     		ldrb	r3, [r0]	@ zero_extendqisi2
+ 380              		.loc 1 243 8 view .LVU89
+ 381 0002 8BBB     		cbnz	r3, .L29
+ 244:Application/Src/IMU_Task.c ****     {
+ 245:Application/Src/IMU_Task.c ****         /* ---- 校准阶段：累加原始陀螺仪数据 ---- */
+ 246:Application/Src/IMU_Task.c ****         gyro_init[0] += IMU_Data.gyro[0];
+ 382              		.loc 1 246 9 is_stmt 1 view .LVU90
+ 383              		.loc 1 246 18 is_stmt 0 view .LVU91
+ 384 0004 194B     		ldr	r3, .L31
+ 385 0006 D3ED006A 		vldr.32	s13, [r3]
+ 386              		.loc 1 246 38 view .LVU92
+ 387 000a 194A     		ldr	r2, .L31+4
+ 388 000c D2ED007A 		vldr.32	s15, [r2]
+ 389              		.loc 1 246 22 view .LVU93
+ 390 0010 76EEA76A 		vadd.f32	s13, s13, s15
+ 391 0014 C3ED006A 		vstr.32	s13, [r3]
+ 247:Application/Src/IMU_Task.c ****         gyro_init[1] += IMU_Data.gyro[1];
+ 392              		.loc 1 247 9 is_stmt 1 view .LVU94
+ 393              		.loc 1 247 18 is_stmt 0 view .LVU95
+ 394 0018 93ED017A 		vldr.32	s14, [r3, #4]
+ 395              		.loc 1 247 38 view .LVU96
+ 396 001c D2ED017A 		vldr.32	s15, [r2, #4]
+ 397              		.loc 1 247 22 view .LVU97
+ 398 0020 37EE277A 		vadd.f32	s14, s14, s15
+ 399 0024 83ED017A 		vstr.32	s14, [r3, #4]
+ 248:Application/Src/IMU_Task.c ****         gyro_init[2] += IMU_Data.gyro[2];
+ 400              		.loc 1 248 9 is_stmt 1 view .LVU98
+ 401              		.loc 1 248 18 is_stmt 0 view .LVU99
+ 402 0028 D3ED027A 		vldr.32	s15, [r3, #8]
+ 403              		.loc 1 248 38 view .LVU100
+ 404 002c 92ED026A 		vldr.32	s12, [r2, #8]
+ 405              		.loc 1 248 22 view .LVU101
+ 406 0030 77EE867A 		vadd.f32	s15, s15, s12
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 13
+
+
+ 407 0034 C3ED027A 		vstr.32	s15, [r3, #8]
+ 249:Application/Src/IMU_Task.c ****         cnt++;
+ 408              		.loc 1 249 9 is_stmt 1 view .LVU102
+ 409              		.loc 1 249 12 is_stmt 0 view .LVU103
+ 410 0038 0E4A     		ldr	r2, .L31+8
+ 411 003a 1368     		ldr	r3, [r2]
+ 412 003c 0133     		adds	r3, r3, #1
+ 413 003e 1360     		str	r3, [r2]
+ 250:Application/Src/IMU_Task.c **** 
+ 251:Application/Src/IMU_Task.c ****         /* ---- 达到指定采样次数后计算零偏均值 ---- */
+ 252:Application/Src/IMU_Task.c ****         if (cnt >= correct_Time_define)
+ 414              		.loc 1 252 9 is_stmt 1 view .LVU104
+ 415              		.loc 1 252 12 is_stmt 0 view .LVU105
+ 416 0040 B3F57A7F 		cmp	r3, #1000
+ 417 0044 10DB     		blt	.L29
+ 253:Application/Src/IMU_Task.c ****         {
+ 254:Application/Src/IMU_Task.c ****             gyro_init[0] /= correct_Time_define;    /* X轴零偏均值              */
+ 418              		.loc 1 254 13 is_stmt 1 view .LVU106
+ 419              		.loc 1 254 26 is_stmt 0 view .LVU107
+ 420 0046 094B     		ldr	r3, .L31
+ 421 0048 9FED0B6A 		vldr.32	s12, .L31+12
+ 422 004c C6EE865A 		vdiv.f32	s11, s13, s12
+ 423 0050 C3ED005A 		vstr.32	s11, [r3]
+ 255:Application/Src/IMU_Task.c ****             gyro_init[1] /= correct_Time_define;    /* Y轴零偏均值              */
+ 424              		.loc 1 255 13 is_stmt 1 view .LVU108
+ 425              		.loc 1 255 26 is_stmt 0 view .LVU109
+ 426 0054 C7EE066A 		vdiv.f32	s13, s14, s12
+ 427 0058 C3ED016A 		vstr.32	s13, [r3, #4]
+ 256:Application/Src/IMU_Task.c ****             gyro_init[2] /= correct_Time_define;    /* Z轴零偏均值              */
+ 428              		.loc 1 256 13 is_stmt 1 view .LVU110
+ 429              		.loc 1 256 26 is_stmt 0 view .LVU111
+ 430 005c 87EE867A 		vdiv.f32	s14, s15, s12
+ 431 0060 83ED027A 		vstr.32	s14, [r3, #8]
+ 257:Application/Src/IMU_Task.c ****             *status = Gyro_Read_Flag;               /* 切换至运行状态            */
+ 432              		.loc 1 257 13 is_stmt 1 view .LVU112
+ 433              		.loc 1 257 21 is_stmt 0 view .LVU113
+ 434 0064 0123     		movs	r3, #1
+ 435 0066 0370     		strb	r3, [r0]
+ 436              	.L29:
+ 258:Application/Src/IMU_Task.c ****         }
+ 259:Application/Src/IMU_Task.c ****     }
+ 260:Application/Src/IMU_Task.c ****     /* 运行阶段：零偏修正由 IMU_Data_Read() 负责，此处无操作 */
+ 261:Application/Src/IMU_Task.c **** }
+ 437              		.loc 1 261 1 view .LVU114
+ 438 0068 7047     		bx	lr
+ 439              	.L32:
+ 440 006a 00BF     		.align	2
+ 441              	.L31:
+ 442 006c 00000000 		.word	gyro_init
+ 443 0070 00000000 		.word	IMU_Data
+ 444 0074 00000000 		.word	cnt.0
+ 445 0078 00007A44 		.word	1148846080
+ 446              		.cfi_endproc
+ 447              	.LFE152:
+ 449              		.section	.text.IMU_Task,"ax",%progbits
+ 450              		.align	1
+ 451              		.global	IMU_Task
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 14
+
+
+ 452              		.syntax unified
+ 453              		.thumb
+ 454              		.thumb_func
+ 456              	IMU_Task:
+ 457              	.LVL14:
+ 458              	.LFB148:
+  70:Application/Src/IMU_Task.c ****     IMU_Init();                             /* 传感器及外设初始化              */
+ 459              		.loc 1 70 1 is_stmt 1 view -0
+ 460              		.cfi_startproc
+ 461              		@ Volatile: function does not return.
+ 462              		@ args = 0, pretend = 0, frame = 0
+ 463              		@ frame_needed = 0, uses_anonymous_args = 0
+  70:Application/Src/IMU_Task.c ****     IMU_Init();                             /* 传感器及外设初始化              */
+ 464              		.loc 1 70 1 is_stmt 0 view .LVU116
+ 465 0000 08B5     		push	{r3, lr}
+ 466              	.LCFI3:
+ 467              		.cfi_def_cfa_offset 8
+ 468              		.cfi_offset 3, -8
+ 469              		.cfi_offset 14, -4
+  71:Application/Src/IMU_Task.c ****     while (1)
+ 470              		.loc 1 71 5 is_stmt 1 view .LVU117
+ 471 0002 FFF7FEFF 		bl	IMU_Init
+ 472              	.LVL15:
+ 473              	.L34:
+  72:Application/Src/IMU_Task.c ****     {
+ 474              		.loc 1 72 5 view .LVU118
+  74:Application/Src/IMU_Task.c ****         IMU_temp_Ctrl();                    /* 温度PID控制（内部300ms分频）    */
+ 475              		.loc 1 74 9 view .LVU119
+ 476 0006 0120     		movs	r0, #1
+ 477 0008 FFF7FEFF 		bl	osDelay
+ 478              	.LVL16:
+  75:Application/Src/IMU_Task.c ****         Gyro_Init(&Init_Status);            /* 陀螺仪零偏校准状态机           */
+ 479              		.loc 1 75 9 view .LVU120
+ 480 000c FFF7FEFF 		bl	IMU_temp_Ctrl
+ 481              	.LVL17:
+  76:Application/Src/IMU_Task.c ****         IMU_Data_Read();                    /* 读取传感器 + Mahony姿态解算    */
+ 482              		.loc 1 76 9 view .LVU121
+ 483 0010 0248     		ldr	r0, .L36
+ 484 0012 FFF7FEFF 		bl	Gyro_Init
+ 485              	.LVL18:
+  77:Application/Src/IMU_Task.c ****     }
+ 486              		.loc 1 77 9 discriminator 2 view .LVU122
+ 487 0016 FFF7FEFF 		bl	IMU_Data_Read
+ 488              	.LVL19:
+  72:Application/Src/IMU_Task.c ****     {
+ 489              		.loc 1 72 11 view .LVU123
+ 490 001a F4E7     		b	.L34
+ 491              	.L37:
+ 492              		.align	2
+ 493              	.L36:
+ 494 001c 00000000 		.word	Init_Status
+ 495              		.cfi_endproc
+ 496              	.LFE148:
+ 498              		.section	.bss.cnt.0,"aw",%nobits
+ 499              		.align	2
+ 502              	cnt.0:
+ 503 0000 00000000 		.space	4
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 15
+
+
+ 504              		.section	.bss.cnt.1,"aw",%nobits
+ 505              		.align	2
+ 508              	cnt.1:
+ 509 0000 00000000 		.space	4
+ 510              		.global	Init_Status
+ 511              		.section	.bss.Init_Status,"aw",%nobits
+ 514              	Init_Status:
+ 515 0000 00       		.space	1
+ 516              		.global	is_err
+ 517              		.section	.bss.is_err,"aw",%nobits
+ 518              		.align	2
+ 521              	is_err:
+ 522 0000 00000000 		.space	4
+ 523              		.global	is_temp_err
+ 524              		.section	.bss.is_temp_err,"aw",%nobits
+ 525              		.align	2
+ 528              	is_temp_err:
+ 529 0000 00000000 		.space	4
+ 530              		.global	pid_temp_args
+ 531              		.section	.data.pid_temp_args,"aw"
+ 532              		.align	2
+ 535              	pid_temp_args:
+ 536 0000 0000C842 		.word	1120403456
+ 537 0004 00004842 		.word	1112014848
+ 538 0008 00004041 		.word	1094713344
+ 539              		.global	IMU_jf
+ 540              		.section	.bss.IMU_jf,"aw",%nobits
+ 541              		.align	2
+ 544              	IMU_jf:
+ 545 0000 00000000 		.space	20
+ 545      00000000 
+ 545      00000000 
+ 545      00000000 
+ 545      00000000 
+ 546              		.global	pid_temp
+ 547              		.section	.bss.pid_temp,"aw",%nobits
+ 548              		.align	2
+ 551              	pid_temp:
+ 552 0000 00000000 		.space	72
+ 552      00000000 
+ 552      00000000 
+ 552      00000000 
+ 552      00000000 
+ 553              		.global	gyro_init
+ 554              		.section	.bss.gyro_init,"aw",%nobits
+ 555              		.align	2
+ 558              	gyro_init:
+ 559 0000 00000000 		.space	12
+ 559      00000000 
+ 559      00000000 
+ 560              		.global	IMU_Data
+ 561              		.section	.bss.IMU_Data,"aw",%nobits
+ 562              		.align	2
+ 565              	IMU_Data:
+ 566 0000 00000000 		.space	44
+ 566      00000000 
+ 566      00000000 
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 16
+
+
+ 566      00000000 
+ 566      00000000 
+ 567              		.global	MahonyAHRS
+ 568              		.section	.bss.MahonyAHRS,"aw",%nobits
+ 569              		.align	2
+ 572              	MahonyAHRS:
+ 573 0000 00000000 		.space	52
+ 573      00000000 
+ 573      00000000 
+ 573      00000000 
+ 573      00000000 
+ 574              		.text
+ 575              	.Letext0:
+ 576              		.file 2 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/machine/_default_types.h"
+ 577              		.file 3 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/sys/_stdint.h"
+ 578              		.file 4 "Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h"
+ 579              		.file 5 "Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h723xx.h"
+ 580              		.file 6 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_def.h"
+ 581              		.file 7 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma.h"
+ 582              		.file 8 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h"
+ 583              		.file 9 "Device/BMI088/Inc/BMI088driver.h"
+ 584              		.file 10 "Algorithms/Filters/MahonyAHRS.h"
+ 585              		.file 11 "Algorithms/Control/pid.h"
+ 586              		.file 12 "Device/USART/Inc/JF_protocol.h"
+ 587              		.file 13 "Core/Inc/tim.h"
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccbN37mA.s 			page 17
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 IMU_Task.c
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:20     .text.IMU_Init:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:26     .text.IMU_Init:00000000 IMU_Init
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:84     .text.IMU_Init:00000044 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:535    .data.pid_temp_args:00000000 pid_temp_args
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:551    .bss.pid_temp:00000000 pid_temp
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:572    .bss.MahonyAHRS:00000000 MahonyAHRS
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:521    .bss.is_err:00000000 is_err
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:96     .text.IMU_temp_Ctrl:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:102    .text.IMU_temp_Ctrl:00000000 IMU_temp_Ctrl
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:201    .text.IMU_temp_Ctrl:00000090 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:508    .bss.cnt.1:00000000 cnt.1
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:565    .bss.IMU_Data:00000000 IMU_Data
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:544    .bss.IMU_jf:00000000 IMU_jf
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:528    .bss.is_temp_err:00000000 is_temp_err
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:214    .text.IMU_Data_Read:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:220    .text.IMU_Data_Read:00000000 IMU_Data_Read
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:350    .text.IMU_Data_Read:000000d4 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:558    .bss.gyro_init:00000000 gyro_init
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:514    .bss.Init_Status:00000000 Init_Status
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:362    .text.Gyro_Init:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:368    .text.Gyro_Init:00000000 Gyro_Init
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:442    .text.Gyro_Init:0000006c $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:502    .bss.cnt.0:00000000 cnt.0
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:450    .text.IMU_Task:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:456    .text.IMU_Task:00000000 IMU_Task
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:494    .text.IMU_Task:0000001c $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:499    .bss.cnt.0:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:505    .bss.cnt.1:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:515    .bss.Init_Status:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:518    .bss.is_err:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:525    .bss.is_temp_err:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:532    .data.pid_temp_args:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:541    .bss.IMU_jf:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:548    .bss.pid_temp:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:555    .bss.gyro_init:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:562    .bss.IMU_Data:00000000 $d
+C:\Users\11464\AppData\Local\Temp\ccbN37mA.s:569    .bss.MahonyAHRS:00000000 $d
+
+UNDEFINED SYMBOLS
+PID_init
+HAL_TIM_PWM_Start
+osDelay
+BMI088_init
+htim3
+BMI088_read
+PID_calc
+Jf_transmit
+PID_clear
+MahonyAHRS_update
+Mahony_computeAngles
+MahonyAHRS_init

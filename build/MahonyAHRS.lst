@@ -1,0 +1,1274 @@
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 1
+
+
+   1              		.cpu cortex-m7
+   2              		.arch armv7e-m
+   3              		.fpu fpv5-d16
+   4              		.eabi_attribute 28, 1
+   5              		.eabi_attribute 20, 1
+   6              		.eabi_attribute 21, 1
+   7              		.eabi_attribute 23, 3
+   8              		.eabi_attribute 24, 1
+   9              		.eabi_attribute 25, 1
+  10              		.eabi_attribute 26, 1
+  11              		.eabi_attribute 30, 1
+  12              		.eabi_attribute 34, 1
+  13              		.eabi_attribute 18, 4
+  14              		.file	"MahonyAHRS.c"
+  15              		.text
+  16              	.Ltext0:
+  17              		.cfi_sections	.debug_frame
+  18              		.file 1 "Algorithms/Filters/MahonyAHRS.c"
+  19              		.section	.text.invSqrt,"ax",%progbits
+  20              		.align	1
+  21              		.syntax unified
+  22              		.thumb
+  23              		.thumb_func
+  25              	invSqrt:
+  26              	.LVL0:
+  27              	.LFB0:
+   1:Algorithms/Filters/MahonyAHRS.c **** #include "MahonyAHRS.h"
+   2:Algorithms/Filters/MahonyAHRS.c **** //-------------------------------------------------------------------------------
+   3:Algorithms/Filters/MahonyAHRS.c **** //MahonyAHRS算法为一种用于姿态解算的显式互补滤波算法
+   4:Algorithms/Filters/MahonyAHRS.c **** //我一直不懂这个单词的意思，今天学了之后才懂了(
+   5:Algorithms/Filters/MahonyAHRS.c **** //BMI088为六轴传感器无磁力计，通过测量获取的加速度和角速度进行解算
+   6:Algorithms/Filters/MahonyAHRS.c **** //-------------------------------------------------------------------------------
+   7:Algorithms/Filters/MahonyAHRS.c **** 
+   8:Algorithms/Filters/MahonyAHRS.c **** static float invSqrt(float x)
+   9:Algorithms/Filters/MahonyAHRS.c **** {
+  28              		.loc 1 9 1 view -0
+  29              		.cfi_startproc
+  30              		@ args = 0, pretend = 0, frame = 16
+  31              		@ frame_needed = 0, uses_anonymous_args = 0
+  32              		.loc 1 9 1 is_stmt 0 view .LVU1
+  33 0000 00B5     		push	{lr}
+  34              	.LCFI0:
+  35              		.cfi_def_cfa_offset 4
+  36              		.cfi_offset 14, -4
+  37 0002 85B0     		sub	sp, sp, #20
+  38              	.LCFI1:
+  39              		.cfi_def_cfa_offset 24
+  40 0004 8DED010A 		vstr.32	s0, [sp, #4]
+  10:Algorithms/Filters/MahonyAHRS.c ****     volatile float y;
+  41              		.loc 1 10 5 is_stmt 1 view .LVU2
+  11:Algorithms/Filters/MahonyAHRS.c ****     memcpy(&y, &x, sizeof(x));
+  42              		.loc 1 11 5 view .LVU3
+  43 0008 019B     		ldr	r3, [sp, #4]
+  44 000a 0393     		str	r3, [sp, #12]
+  12:Algorithms/Filters/MahonyAHRS.c ****     y = 1.0f / sqrtf(y);
+  45              		.loc 1 12 5 view .LVU4
+  46              		.loc 1 12 16 is_stmt 0 view .LVU5
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 2
+
+
+  47 000c 9DED030A 		vldr.32	s0, [sp, #12]
+  48              	.LVL1:
+  49              		.loc 1 12 16 view .LVU6
+  50 0010 FFF7FEFF 		bl	sqrtf
+  51              	.LVL2:
+  52              		.loc 1 12 14 discriminator 1 view .LVU7
+  53 0014 B7EE007A 		vmov.f32	s14, #1.0e+0
+  54 0018 C7EE007A 		vdiv.f32	s15, s14, s0
+  55              		.loc 1 12 7 discriminator 1 view .LVU8
+  56 001c CDED037A 		vstr.32	s15, [sp, #12]
+  13:Algorithms/Filters/MahonyAHRS.c ****     return y;
+  57              		.loc 1 13 5 is_stmt 1 view .LVU9
+  58              		.loc 1 13 12 is_stmt 0 view .LVU10
+  59 0020 9DED030A 		vldr.32	s0, [sp, #12]
+  14:Algorithms/Filters/MahonyAHRS.c **** }
+  60              		.loc 1 14 1 view .LVU11
+  61 0024 05B0     		add	sp, sp, #20
+  62              	.LCFI2:
+  63              		.cfi_def_cfa_offset 4
+  64              		@ sp needed
+  65 0026 00BD     		pop	{pc}
+  66              		.loc 1 14 1 view .LVU12
+  67              		.cfi_endproc
+  68              	.LFE0:
+  70              		.section	.text.Mahony_invsqrt,"ax",%progbits
+  71              		.align	1
+  72              		.global	Mahony_invsqrt
+  73              		.syntax unified
+  74              		.thumb
+  75              		.thumb_func
+  77              	Mahony_invsqrt:
+  78              	.LVL3:
+  79              	.LFB1:
+  15:Algorithms/Filters/MahonyAHRS.c **** 
+  16:Algorithms/Filters/MahonyAHRS.c **** //快速倒数平方根(为无FPU准备，可优化计算)
+  17:Algorithms/Filters/MahonyAHRS.c **** //在带FPU运算单元时可以直接用1.0f/sqrtf(x)
+  18:Algorithms/Filters/MahonyAHRS.c **** float Mahony_invsqrt(float x)
+  19:Algorithms/Filters/MahonyAHRS.c **** {
+  80              		.loc 1 19 1 is_stmt 1 view -0
+  81              		.cfi_startproc
+  82              		@ args = 0, pretend = 0, frame = 0
+  83              		@ frame_needed = 0, uses_anonymous_args = 0
+  84              		@ link register save eliminated.
+  20:Algorithms/Filters/MahonyAHRS.c ****     float halfx = 0.5f * x;
+  85              		.loc 1 20 5 view .LVU14
+  21:Algorithms/Filters/MahonyAHRS.c ****     float y = x;
+  86              		.loc 1 21 5 view .LVU15
+  22:Algorithms/Filters/MahonyAHRS.c ****     uint32_t i;
+  87              		.loc 1 22 5 view .LVU16
+  23:Algorithms/Filters/MahonyAHRS.c ****     memcpy(&i, &y, sizeof(y));
+  88              		.loc 1 23 5 view .LVU17
+  24:Algorithms/Filters/MahonyAHRS.c ****     i = 0x5f1ffff9 - (i>>1);
+  89              		.loc 1 24 5 view .LVU18
+  25:Algorithms/Filters/MahonyAHRS.c ****     memcpy(&y, &i, sizeof(i));
+  90              		.loc 1 25 5 view .LVU19
+  26:Algorithms/Filters/MahonyAHRS.c ****     y = y * (1.5f - (halfx * y * y));
+  91              		.loc 1 26 5 view .LVU20
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 3
+
+
+  27:Algorithms/Filters/MahonyAHRS.c ****     y = y * (1.5f - (halfx * y * y));
+  92              		.loc 1 27 5 view .LVU21
+  93              	.LVL4:
+  28:Algorithms/Filters/MahonyAHRS.c **** }
+  94              		.loc 1 28 1 is_stmt 0 view .LVU22
+  95 0000 7047     		bx	lr
+  96              		.cfi_endproc
+  97              	.LFE1:
+  99              		.section	.text.MahonyAHRS_init,"ax",%progbits
+ 100              		.align	1
+ 101              		.global	MahonyAHRS_init
+ 102              		.syntax unified
+ 103              		.thumb
+ 104              		.thumb_func
+ 106              	MahonyAHRS_init:
+ 107              	.LVL5:
+ 108              	.LFB2:
+  29:Algorithms/Filters/MahonyAHRS.c **** 
+  30:Algorithms/Filters/MahonyAHRS.c **** //互补滤波初始化函数，获得初始四元数
+  31:Algorithms/Filters/MahonyAHRS.c **** void MahonyAHRS_init(float ax,float ay,float az,float gx,float gy,float gz,Mahony_t *MahonyAHRS)
+  32:Algorithms/Filters/MahonyAHRS.c **** {
+ 109              		.loc 1 32 1 is_stmt 1 view -0
+ 110              		.cfi_startproc
+ 111              		@ args = 0, pretend = 0, frame = 0
+ 112              		@ frame_needed = 0, uses_anonymous_args = 0
+ 113              		.loc 1 32 1 is_stmt 0 view .LVU24
+ 114 0000 10B5     		push	{r4, lr}
+ 115              	.LCFI3:
+ 116              		.cfi_def_cfa_offset 8
+ 117              		.cfi_offset 4, -8
+ 118              		.cfi_offset 14, -4
+ 119 0002 2DED088B 		vpush.64	{d8, d9, d10, d11}
+ 120              	.LCFI4:
+ 121              		.cfi_def_cfa_offset 40
+ 122              		.cfi_offset 80, -40
+ 123              		.cfi_offset 81, -36
+ 124              		.cfi_offset 82, -32
+ 125              		.cfi_offset 83, -28
+ 126              		.cfi_offset 84, -24
+ 127              		.cfi_offset 85, -20
+ 128              		.cfi_offset 86, -16
+ 129              		.cfi_offset 87, -12
+ 130 0006 B0EE409A 		vmov.f32	s18, s0
+ 131 000a F0EE609A 		vmov.f32	s19, s1
+ 132 000e B0EE418A 		vmov.f32	s16, s2
+ 133 0012 F0EE61AA 		vmov.f32	s21, s3
+ 134 0016 B0EE42AA 		vmov.f32	s20, s4
+ 135 001a B0EE62BA 		vmov.f32	s22, s5
+ 136 001e 0446     		mov	r4, r0
+  33:Algorithms/Filters/MahonyAHRS.c ****     float recipNorm;
+ 137              		.loc 1 33 5 is_stmt 1 view .LVU25
+  34:Algorithms/Filters/MahonyAHRS.c ****     float init_yaw,init_pitch,init_roll;
+ 138              		.loc 1 34 5 view .LVU26
+  35:Algorithms/Filters/MahonyAHRS.c ****     float cr2,cp2,cy2,sr2,sp2,sy2;
+ 139              		.loc 1 35 5 view .LVU27
+  36:Algorithms/Filters/MahonyAHRS.c ****     float sin_roll,cos_roll,sin_pitch,cos_pitch;
+ 140              		.loc 1 36 5 view .LVU28
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 4
+
+
+  37:Algorithms/Filters/MahonyAHRS.c ****     float magX,magY;
+ 141              		.loc 1 37 5 view .LVU29
+  38:Algorithms/Filters/MahonyAHRS.c ****     float q0,q1,q2,q3;
+ 142              		.loc 1 38 5 view .LVU30
+  39:Algorithms/Filters/MahonyAHRS.c **** 
+  40:Algorithms/Filters/MahonyAHRS.c ****     recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+ 143              		.loc 1 40 5 view .LVU31
+ 144              		.loc 1 40 28 is_stmt 0 view .LVU32
+ 145 0020 60EE007A 		vmul.f32	s15, s0, s0
+ 146              		.loc 1 40 38 view .LVU33
+ 147 0024 20EEA07A 		vmul.f32	s14, s1, s1
+ 148              		.loc 1 40 33 view .LVU34
+ 149 0028 77EE877A 		vadd.f32	s15, s15, s14
+ 150              		.loc 1 40 48 view .LVU35
+ 151 002c 21EE010A 		vmul.f32	s0, s2, s2
+ 152              	.LVL6:
+ 153              		.loc 1 40 17 view .LVU36
+ 154 0030 37EE800A 		vadd.f32	s0, s15, s0
+ 155 0034 FFF7FEFF 		bl	invSqrt
+ 156              	.LVL7:
+  41:Algorithms/Filters/MahonyAHRS.c ****     ax *= recipNorm;
+ 157              		.loc 1 41 5 is_stmt 1 view .LVU37
+ 158              		.loc 1 41 8 is_stmt 0 view .LVU38
+ 159 0038 29EE009A 		vmul.f32	s18, s18, s0
+ 160              	.LVL8:
+  42:Algorithms/Filters/MahonyAHRS.c ****     ay *= recipNorm;
+ 161              		.loc 1 42 5 is_stmt 1 view .LVU39
+ 162              		.loc 1 42 8 is_stmt 0 view .LVU40
+ 163 003c 69EE809A 		vmul.f32	s19, s19, s0
+ 164              	.LVL9:
+  43:Algorithms/Filters/MahonyAHRS.c ****     az *= recipNorm;
+ 165              		.loc 1 43 5 is_stmt 1 view .LVU41
+ 166              		.loc 1 43 8 is_stmt 0 view .LVU42
+ 167 0040 28EE008A 		vmul.f32	s16, s16, s0
+ 168              	.LVL10:
+  44:Algorithms/Filters/MahonyAHRS.c ****     //磁力计传入数据处理(我们BMI088没有磁力计)
+  45:Algorithms/Filters/MahonyAHRS.c ****     if((gx != 0.0f) && (gy != 0.0f) && (gz != 0.0f))
+ 169              		.loc 1 45 5 is_stmt 1 view .LVU43
+ 170              		.loc 1 45 12 is_stmt 0 view .LVU44
+ 171 0044 F5EE40AA 		vcmp.f32	s21, #0
+ 172 0048 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 173 004c 14BF     		ite	ne
+ 174 004e 0123     		movne	r3, #1
+ 175 0050 0023     		moveq	r3, #0
+ 176              		.loc 1 45 28 view .LVU45
+ 177 0052 B5EE40AA 		vcmp.f32	s20, #0
+ 178 0056 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 179              		.loc 1 45 21 view .LVU46
+ 180 005a 03F00103 		and	r3, r3, #1
+ 181 005e 08BF     		it	eq
+ 182 0060 0023     		moveq	r3, #0
+ 183              		.loc 1 45 7 view .LVU47
+ 184 0062 23B1     		cbz	r3, .L5
+ 185              		.loc 1 45 37 discriminator 1 view .LVU48
+ 186 0064 B5EE40BA 		vcmp.f32	s22, #0
+ 187 0068 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 188 006c 3BD1     		bne	.L10
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 5
+
+
+ 189              	.LVL11:
+ 190              	.L5:
+  46:Algorithms/Filters/MahonyAHRS.c ****     {
+  47:Algorithms/Filters/MahonyAHRS.c ****         recipNorm = invSqrt(gx * gx + gy * gy + gz * gz);
+  48:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+  49:Algorithms/Filters/MahonyAHRS.c ****         gy *= recipNorm;
+  50:Algorithms/Filters/MahonyAHRS.c ****         gz *= recipNorm;
+  51:Algorithms/Filters/MahonyAHRS.c ****     }
+  52:Algorithms/Filters/MahonyAHRS.c ****     init_pitch = atan2f(-ax,az);
+ 191              		.loc 1 52 5 is_stmt 1 view .LVU49
+ 192              		.loc 1 52 18 is_stmt 0 view .LVU50
+ 193 006e F0EE480A 		vmov.f32	s1, s16
+ 194 0072 B1EE490A 		vneg.f32	s0, s18
+ 195              	.LVL12:
+ 196              		.loc 1 52 18 view .LVU51
+ 197 0076 FFF7FEFF 		bl	atan2f
+ 198              	.LVL13:
+ 199 007a F0EE408A 		vmov.f32	s17, s0
+ 200              	.LVL14:
+  53:Algorithms/Filters/MahonyAHRS.c ****     init_roll = atan2f(ay,az);
+ 201              		.loc 1 53 5 is_stmt 1 view .LVU52
+ 202              		.loc 1 53 17 is_stmt 0 view .LVU53
+ 203 007e F0EE480A 		vmov.f32	s1, s16
+ 204 0082 B0EE690A 		vmov.f32	s0, s19
+ 205              	.LVL15:
+ 206              		.loc 1 53 17 view .LVU54
+ 207 0086 FFF7FEFF 		bl	atan2f
+ 208              	.LVL16:
+ 209 008a B0EE408A 		vmov.f32	s16, s0
+ 210              	.LVL17:
+  54:Algorithms/Filters/MahonyAHRS.c **** 
+  55:Algorithms/Filters/MahonyAHRS.c ****     sin_roll = sinf(init_roll);
+ 211              		.loc 1 55 5 is_stmt 1 view .LVU55
+ 212              		.loc 1 55 16 is_stmt 0 view .LVU56
+ 213 008e FFF7FEFF 		bl	sinf
+ 214              	.LVL18:
+ 215              		.loc 1 55 16 view .LVU57
+ 216 0092 B0EE409A 		vmov.f32	s18, s0
+ 217              	.LVL19:
+  56:Algorithms/Filters/MahonyAHRS.c ****     cos_roll = cosf(init_roll);
+ 218              		.loc 1 56 5 is_stmt 1 view .LVU58
+ 219              		.loc 1 56 16 is_stmt 0 view .LVU59
+ 220 0096 B0EE480A 		vmov.f32	s0, s16
+ 221              	.LVL20:
+ 222              		.loc 1 56 16 view .LVU60
+ 223 009a FFF7FEFF 		bl	cosf
+ 224              	.LVL21:
+ 225 009e F0EE409A 		vmov.f32	s19, s0
+ 226              	.LVL22:
+  57:Algorithms/Filters/MahonyAHRS.c ****     cos_pitch = cosf(init_pitch);
+ 227              		.loc 1 57 5 is_stmt 1 view .LVU61
+ 228              		.loc 1 57 17 is_stmt 0 view .LVU62
+ 229 00a2 B0EE680A 		vmov.f32	s0, s17
+ 230              	.LVL23:
+ 231              		.loc 1 57 17 view .LVU63
+ 232 00a6 FFF7FEFF 		bl	cosf
+ 233              	.LVL24:
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 6
+
+
+ 234 00aa F0EE40BA 		vmov.f32	s23, s0
+ 235              	.LVL25:
+  58:Algorithms/Filters/MahonyAHRS.c ****     sin_pitch = sinf(init_pitch);
+ 236              		.loc 1 58 5 is_stmt 1 view .LVU64
+ 237              		.loc 1 58 17 is_stmt 0 view .LVU65
+ 238 00ae B0EE680A 		vmov.f32	s0, s17
+ 239              	.LVL26:
+ 240              		.loc 1 58 17 view .LVU66
+ 241 00b2 FFF7FEFF 		bl	sinf
+ 242              	.LVL27:
+  59:Algorithms/Filters/MahonyAHRS.c **** 
+  60:Algorithms/Filters/MahonyAHRS.c ****     if((gx != 0.0f) && (gy != 0.0f) && (gz != 0.0f))
+ 243              		.loc 1 60 5 is_stmt 1 view .LVU67
+ 244              		.loc 1 60 12 is_stmt 0 view .LVU68
+ 245 00b6 F5EE40AA 		vcmp.f32	s21, #0
+ 246 00ba F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 247 00be 14BF     		ite	ne
+ 248 00c0 0123     		movne	r3, #1
+ 249 00c2 0023     		moveq	r3, #0
+ 250              		.loc 1 60 28 view .LVU69
+ 251 00c4 B5EE40AA 		vcmp.f32	s20, #0
+ 252 00c8 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 253              		.loc 1 60 21 view .LVU70
+ 254 00cc 03F00103 		and	r3, r3, #1
+ 255 00d0 08BF     		it	eq
+ 256 00d2 0023     		moveq	r3, #0
+ 257              		.loc 1 60 7 view .LVU71
+ 258 00d4 ABB3     		cbz	r3, .L7
+ 259              		.loc 1 60 37 discriminator 1 view .LVU72
+ 260 00d6 B5EE40BA 		vcmp.f32	s22, #0
+ 261 00da F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 262 00de 15D1     		bne	.L11
+  61:Algorithms/Filters/MahonyAHRS.c ****     {
+  62:Algorithms/Filters/MahonyAHRS.c ****         magX = gx * cos_pitch + gy * sin_roll * sin_pitch + gz * cos_roll * sin_pitch;
+  63:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+  64:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = atan2f(-magY,magX);
+  65:Algorithms/Filters/MahonyAHRS.c ****     }else{
+  66:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = 0.0f;
+ 263              		.loc 1 66 18 view .LVU73
+ 264 00e0 9FED50AA 		vldr.32	s20, .L12
+ 265              	.LVL28:
+ 266              		.loc 1 66 18 view .LVU74
+ 267 00e4 2FE0     		b	.L6
+ 268              	.LVL29:
+ 269              	.L10:
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ 270              		.loc 1 47 9 is_stmt 1 view .LVU75
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ 271              		.loc 1 47 32 is_stmt 0 view .LVU76
+ 272 00e6 6AEEAA7A 		vmul.f32	s15, s21, s21
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ 273              		.loc 1 47 42 view .LVU77
+ 274 00ea 2AEE0A7A 		vmul.f32	s14, s20, s20
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ 275              		.loc 1 47 37 view .LVU78
+ 276 00ee 77EE877A 		vadd.f32	s15, s15, s14
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 7
+
+
+ 277              		.loc 1 47 52 view .LVU79
+ 278 00f2 2BEE0B0A 		vmul.f32	s0, s22, s22
+ 279              	.LVL30:
+  47:Algorithms/Filters/MahonyAHRS.c ****         gx *= recipNorm;
+ 280              		.loc 1 47 21 view .LVU80
+ 281 00f6 37EE800A 		vadd.f32	s0, s15, s0
+ 282 00fa FFF7FEFF 		bl	invSqrt
+ 283              	.LVL31:
+  48:Algorithms/Filters/MahonyAHRS.c ****         gy *= recipNorm;
+ 284              		.loc 1 48 9 is_stmt 1 view .LVU81
+  48:Algorithms/Filters/MahonyAHRS.c ****         gy *= recipNorm;
+ 285              		.loc 1 48 12 is_stmt 0 view .LVU82
+ 286 00fe 6AEE80AA 		vmul.f32	s21, s21, s0
+ 287              	.LVL32:
+  49:Algorithms/Filters/MahonyAHRS.c ****         gz *= recipNorm;
+ 288              		.loc 1 49 9 is_stmt 1 view .LVU83
+  49:Algorithms/Filters/MahonyAHRS.c ****         gz *= recipNorm;
+ 289              		.loc 1 49 12 is_stmt 0 view .LVU84
+ 290 0102 2AEE00AA 		vmul.f32	s20, s20, s0
+ 291              	.LVL33:
+  50:Algorithms/Filters/MahonyAHRS.c ****     }
+ 292              		.loc 1 50 9 is_stmt 1 view .LVU85
+  50:Algorithms/Filters/MahonyAHRS.c ****     }
+ 293              		.loc 1 50 12 is_stmt 0 view .LVU86
+ 294 0106 2BEE00BA 		vmul.f32	s22, s22, s0
+ 295              	.LVL34:
+  50:Algorithms/Filters/MahonyAHRS.c ****     }
+ 296              		.loc 1 50 12 view .LVU87
+ 297 010a B0E7     		b	.L5
+ 298              	.LVL35:
+ 299              	.L11:
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 300              		.loc 1 62 9 is_stmt 1 view .LVU88
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 301              		.loc 1 62 19 is_stmt 0 view .LVU89
+ 302 010c 6AEEABAA 		vmul.f32	s21, s21, s23
+ 303              	.LVL36:
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 304              		.loc 1 62 36 view .LVU90
+ 305 0110 6AEE097A 		vmul.f32	s15, s20, s18
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 306              		.loc 1 62 47 view .LVU91
+ 307 0114 67EE807A 		vmul.f32	s15, s15, s0
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 308              		.loc 1 62 31 view .LVU92
+ 309 0118 7AEEA7AA 		vadd.f32	s21, s21, s15
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 310              		.loc 1 62 64 view .LVU93
+ 311 011c 6BEE290A 		vmul.f32	s1, s22, s19
+  62:Algorithms/Filters/MahonyAHRS.c ****         magY = gy * cos_roll - gz * sin_roll;
+ 312              		.loc 1 62 75 view .LVU94
+ 313 0120 60EE800A 		vmul.f32	s1, s1, s0
+ 314              	.LVL37:
+  63:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = atan2f(-magY,magX);
+ 315              		.loc 1 63 9 is_stmt 1 view .LVU95
+  63:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = atan2f(-magY,magX);
+ 316              		.loc 1 63 19 is_stmt 0 view .LVU96
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 8
+
+
+ 317 0124 2AEE29AA 		vmul.f32	s20, s20, s19
+ 318              	.LVL38:
+  63:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = atan2f(-magY,magX);
+ 319              		.loc 1 63 35 view .LVU97
+ 320 0128 2BEE090A 		vmul.f32	s0, s22, s18
+ 321              	.LVL39:
+  63:Algorithms/Filters/MahonyAHRS.c ****         init_yaw = atan2f(-magY,magX);
+ 322              		.loc 1 63 14 view .LVU98
+ 323 012c 3AEE400A 		vsub.f32	s0, s20, s0
+ 324              	.LVL40:
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 325              		.loc 1 64 9 is_stmt 1 view .LVU99
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 326              		.loc 1 64 20 is_stmt 0 view .LVU100
+ 327 0130 7AEEA00A 		vadd.f32	s1, s21, s1
+ 328              	.LVL41:
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 329              		.loc 1 64 20 view .LVU101
+ 330 0134 B1EE400A 		vneg.f32	s0, s0
+ 331              	.LVL42:
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 332              		.loc 1 64 20 view .LVU102
+ 333 0138 FFF7FEFF 		bl	atan2f
+ 334              	.LVL43:
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 335              		.loc 1 64 20 view .LVU103
+ 336 013c B0EE40AA 		vmov.f32	s20, s0
+ 337              	.LVL44:
+  64:Algorithms/Filters/MahonyAHRS.c ****     }else{
+ 338              		.loc 1 64 18 view .LVU104
+ 339 0140 01E0     		b	.L6
+ 340              	.LVL45:
+ 341              	.L7:
+ 342              		.loc 1 66 18 view .LVU105
+ 343 0142 9FED38AA 		vldr.32	s20, .L12
+ 344              	.LVL46:
+ 345              	.L6:
+  67:Algorithms/Filters/MahonyAHRS.c ****     }
+  68:Algorithms/Filters/MahonyAHRS.c ****     cr2 = cosf(init_roll * 0.5f);
+ 346              		.loc 1 68 5 is_stmt 1 view .LVU106
+ 347              		.loc 1 68 11 is_stmt 0 view .LVU107
+ 348 0146 F6EE00AA 		vmov.f32	s21, #5.0e-1
+ 349 014a 68EE2A9A 		vmul.f32	s19, s16, s21
+ 350              	.LVL47:
+ 351              		.loc 1 68 11 view .LVU108
+ 352 014e B0EE690A 		vmov.f32	s0, s19
+ 353 0152 FFF7FEFF 		bl	cosf
+ 354              	.LVL48:
+ 355 0156 B0EE409A 		vmov.f32	s18, s0
+ 356              	.LVL49:
+  69:Algorithms/Filters/MahonyAHRS.c ****     cp2 = cosf(init_pitch * 0.5f);
+ 357              		.loc 1 69 5 is_stmt 1 view .LVU109
+ 358              		.loc 1 69 11 is_stmt 0 view .LVU110
+ 359 015a 68EEAA8A 		vmul.f32	s17, s17, s21
+ 360              	.LVL50:
+ 361              		.loc 1 69 11 view .LVU111
+ 362 015e B0EE680A 		vmov.f32	s0, s17
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 9
+
+
+ 363              	.LVL51:
+ 364              		.loc 1 69 11 view .LVU112
+ 365 0162 FFF7FEFF 		bl	cosf
+ 366              	.LVL52:
+ 367 0166 B0EE408A 		vmov.f32	s16, s0
+ 368              	.LVL53:
+  70:Algorithms/Filters/MahonyAHRS.c ****     cy2 = cosf(init_yaw * 0.5f);
+ 369              		.loc 1 70 5 is_stmt 1 view .LVU113
+ 370              		.loc 1 70 11 is_stmt 0 view .LVU114
+ 371 016a 2AEE2AAA 		vmul.f32	s20, s20, s21
+ 372              	.LVL54:
+ 373              		.loc 1 70 11 view .LVU115
+ 374 016e B0EE4A0A 		vmov.f32	s0, s20
+ 375              	.LVL55:
+ 376              		.loc 1 70 11 view .LVU116
+ 377 0172 FFF7FEFF 		bl	cosf
+ 378              	.LVL56:
+ 379 0176 F0EE40AA 		vmov.f32	s21, s0
+ 380              	.LVL57:
+  71:Algorithms/Filters/MahonyAHRS.c ****     sr2 = sinf(init_roll * 0.5f);
+ 381              		.loc 1 71 5 is_stmt 1 view .LVU117
+ 382              		.loc 1 71 11 is_stmt 0 view .LVU118
+ 383 017a B0EE690A 		vmov.f32	s0, s19
+ 384              	.LVL58:
+ 385              		.loc 1 71 11 view .LVU119
+ 386 017e FFF7FEFF 		bl	sinf
+ 387              	.LVL59:
+ 388 0182 B0EE40BA 		vmov.f32	s22, s0
+ 389              	.LVL60:
+  72:Algorithms/Filters/MahonyAHRS.c ****     sp2 = sinf(init_pitch * 0.5f);
+ 390              		.loc 1 72 5 is_stmt 1 view .LVU120
+ 391              		.loc 1 72 11 is_stmt 0 view .LVU121
+ 392 0186 B0EE680A 		vmov.f32	s0, s17
+ 393              	.LVL61:
+ 394              		.loc 1 72 11 view .LVU122
+ 395 018a FFF7FEFF 		bl	sinf
+ 396              	.LVL62:
+ 397 018e F0EE409A 		vmov.f32	s19, s0
+ 398              	.LVL63:
+  73:Algorithms/Filters/MahonyAHRS.c ****     sy2 = sinf(init_yaw * 0.5f);
+ 399              		.loc 1 73 5 is_stmt 1 view .LVU123
+ 400              		.loc 1 73 11 is_stmt 0 view .LVU124
+ 401 0192 B0EE4A0A 		vmov.f32	s0, s20
+ 402              	.LVL64:
+ 403              		.loc 1 73 11 view .LVU125
+ 404 0196 FFF7FEFF 		bl	sinf
+ 405              	.LVL65:
+  74:Algorithms/Filters/MahonyAHRS.c **** 
+  75:Algorithms/Filters/MahonyAHRS.c ****     q0 = cr2 * cp2 * cy2 + sr2 * sp2 * sy2;
+ 406              		.loc 1 75 5 is_stmt 1 view .LVU126
+ 407              		.loc 1 75 14 is_stmt 0 view .LVU127
+ 408 019a 69EE088A 		vmul.f32	s17, s18, s16
+ 409              		.loc 1 75 20 view .LVU128
+ 410 019e 28EEAAAA 		vmul.f32	s20, s17, s21
+ 411              		.loc 1 75 32 view .LVU129
+ 412 01a2 6BEE296A 		vmul.f32	s13, s22, s19
+ 413              		.loc 1 75 38 view .LVU130
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 10
+
+
+ 414 01a6 66EE807A 		vmul.f32	s15, s13, s0
+ 415              		.loc 1 75 8 view .LVU131
+ 416 01aa 3AEE27AA 		vadd.f32	s20, s20, s15
+ 417              	.LVL66:
+  76:Algorithms/Filters/MahonyAHRS.c ****     q1 = sr2 * cp2 * cy2 - cr2 * sp2 * sy2;
+ 418              		.loc 1 76 5 is_stmt 1 view .LVU132
+ 419              		.loc 1 76 14 is_stmt 0 view .LVU133
+ 420 01ae 68EE0B7A 		vmul.f32	s15, s16, s22
+ 421              		.loc 1 76 20 view .LVU134
+ 422 01b2 67EEAA5A 		vmul.f32	s11, s15, s21
+ 423              		.loc 1 76 32 view .LVU135
+ 424 01b6 29EE299A 		vmul.f32	s18, s18, s19
+ 425              	.LVL67:
+ 426              		.loc 1 76 38 view .LVU136
+ 427 01ba 29EE006A 		vmul.f32	s12, s18, s0
+ 428              		.loc 1 76 8 view .LVU137
+ 429 01be 75EEC69A 		vsub.f32	s19, s11, s12
+ 430              	.LVL68:
+  77:Algorithms/Filters/MahonyAHRS.c ****     q2 = cr2 * sp2 * cy2 + sr2 * cp2 * sy2;
+ 431              		.loc 1 77 5 is_stmt 1 view .LVU138
+ 432              		.loc 1 77 20 is_stmt 0 view .LVU139
+ 433 01c2 29EE2A9A 		vmul.f32	s18, s18, s21
+ 434              		.loc 1 77 38 view .LVU140
+ 435 01c6 67EE807A 		vmul.f32	s15, s15, s0
+ 436              		.loc 1 77 8 view .LVU141
+ 437 01ca 39EE278A 		vadd.f32	s16, s18, s15
+ 438              	.LVL69:
+  78:Algorithms/Filters/MahonyAHRS.c ****     q3 = cr2 * cp2 * sy2 - sr2 * sp2 * cy2;
+ 439              		.loc 1 78 5 is_stmt 1 view .LVU142
+ 440              		.loc 1 78 20 is_stmt 0 view .LVU143
+ 441 01ce 68EE808A 		vmul.f32	s17, s17, s0
+ 442              		.loc 1 78 38 view .LVU144
+ 443 01d2 66EEAA6A 		vmul.f32	s13, s13, s21
+ 444              		.loc 1 78 8 view .LVU145
+ 445 01d6 78EEE68A 		vsub.f32	s17, s17, s13
+ 446              	.LVL70:
+  79:Algorithms/Filters/MahonyAHRS.c **** 
+  80:Algorithms/Filters/MahonyAHRS.c ****     //归一化四元数
+  81:Algorithms/Filters/MahonyAHRS.c ****     recipNorm = invSqrt(q0 *q0 + q1 * q1 + q2 * q2 + q3 * q3);
+ 447              		.loc 1 81 5 is_stmt 1 view .LVU146
+ 448              		.loc 1 81 28 is_stmt 0 view .LVU147
+ 449 01da 6AEE0A7A 		vmul.f32	s15, s20, s20
+ 450              		.loc 1 81 37 view .LVU148
+ 451 01de 29EEA97A 		vmul.f32	s14, s19, s19
+ 452              		.loc 1 81 32 view .LVU149
+ 453 01e2 77EE877A 		vadd.f32	s15, s15, s14
+ 454              		.loc 1 81 47 view .LVU150
+ 455 01e6 28EE087A 		vmul.f32	s14, s16, s16
+ 456              		.loc 1 81 42 view .LVU151
+ 457 01ea 77EE877A 		vadd.f32	s15, s15, s14
+ 458              		.loc 1 81 57 view .LVU152
+ 459 01ee 28EEA80A 		vmul.f32	s0, s17, s17
+ 460              	.LVL71:
+ 461              		.loc 1 81 17 view .LVU153
+ 462 01f2 37EE800A 		vadd.f32	s0, s15, s0
+ 463 01f6 FFF7FEFF 		bl	invSqrt
+ 464              	.LVL72:
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 11
+
+
+  82:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q0 = q0 * recipNorm;
+ 465              		.loc 1 82 5 is_stmt 1 view .LVU154
+ 466              		.loc 1 82 25 is_stmt 0 view .LVU155
+ 467 01fa 2AEE00AA 		vmul.f32	s20, s20, s0
+ 468              	.LVL73:
+ 469              		.loc 1 82 20 view .LVU156
+ 470 01fe 84ED00AA 		vstr.32	s20, [r4]
+  83:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q1 = q1 * recipNorm;
+ 471              		.loc 1 83 5 is_stmt 1 view .LVU157
+ 472              		.loc 1 83 25 is_stmt 0 view .LVU158
+ 473 0202 69EE809A 		vmul.f32	s19, s19, s0
+ 474              	.LVL74:
+ 475              		.loc 1 83 20 view .LVU159
+ 476 0206 C4ED019A 		vstr.32	s19, [r4, #4]
+  84:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q2 = q2 * recipNorm;
+ 477              		.loc 1 84 5 is_stmt 1 view .LVU160
+ 478              		.loc 1 84 25 is_stmt 0 view .LVU161
+ 479 020a 28EE008A 		vmul.f32	s16, s16, s0
+ 480              	.LVL75:
+ 481              		.loc 1 84 20 view .LVU162
+ 482 020e 84ED028A 		vstr.32	s16, [r4, #8]
+  85:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q3 = q3 * recipNorm;
+ 483              		.loc 1 85 5 is_stmt 1 view .LVU163
+ 484              		.loc 1 85 25 is_stmt 0 view .LVU164
+ 485 0212 68EE808A 		vmul.f32	s17, s17, s0
+ 486              	.LVL76:
+ 487              		.loc 1 85 20 view .LVU165
+ 488 0216 C4ED038A 		vstr.32	s17, [r4, #12]
+  86:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->recipNorm = recipNorm;
+ 489              		.loc 1 86 5 is_stmt 1 view .LVU166
+ 490              		.loc 1 86 27 is_stmt 0 view .LVU167
+ 491 021a 84ED070A 		vstr.32	s0, [r4, #28]
+  87:Algorithms/Filters/MahonyAHRS.c **** }
+ 492              		.loc 1 87 1 view .LVU168
+ 493 021e BDEC088B 		vldm	sp!, {d8-d11}
+ 494              	.LCFI5:
+ 495              		.cfi_restore 86
+ 496              		.cfi_restore 87
+ 497              		.cfi_restore 84
+ 498              		.cfi_restore 85
+ 499              		.cfi_restore 82
+ 500              		.cfi_restore 83
+ 501              		.cfi_restore 80
+ 502              		.cfi_restore 81
+ 503              		.cfi_def_cfa_offset 8
+ 504              	.LVL77:
+ 505              		.loc 1 87 1 view .LVU169
+ 506 0222 10BD     		pop	{r4, pc}
+ 507              	.LVL78:
+ 508              	.L13:
+ 509              		.loc 1 87 1 view .LVU170
+ 510              		.align	2
+ 511              	.L12:
+ 512 0224 00000000 		.word	0
+ 513              		.cfi_endproc
+ 514              	.LFE2:
+ 516              		.section	.text.MahonyAHRS_update,"ax",%progbits
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 12
+
+
+ 517              		.align	1
+ 518              		.global	MahonyAHRS_update
+ 519              		.syntax unified
+ 520              		.thumb
+ 521              		.thumb_func
+ 523              	MahonyAHRS_update:
+ 524              	.LVL79:
+ 525              	.LFB3:
+  88:Algorithms/Filters/MahonyAHRS.c **** 
+  89:Algorithms/Filters/MahonyAHRS.c **** //六轴数据更新
+  90:Algorithms/Filters/MahonyAHRS.c **** void MahonyAHRS_update(float gx,float gy,float gz,float ax,float ay,float az,Mahony_t *MahonyAHRS)
+  91:Algorithms/Filters/MahonyAHRS.c **** {
+ 526              		.loc 1 91 1 is_stmt 1 view -0
+ 527              		.cfi_startproc
+ 528              		@ args = 0, pretend = 0, frame = 0
+ 529              		@ frame_needed = 0, uses_anonymous_args = 0
+ 530              		.loc 1 91 1 is_stmt 0 view .LVU172
+ 531 0000 10B5     		push	{r4, lr}
+ 532              	.LCFI6:
+ 533              		.cfi_def_cfa_offset 8
+ 534              		.cfi_offset 4, -8
+ 535              		.cfi_offset 14, -4
+ 536 0002 2DED068B 		vpush.64	{d8, d9, d10}
+ 537              	.LCFI7:
+ 538              		.cfi_def_cfa_offset 32
+ 539              		.cfi_offset 80, -32
+ 540              		.cfi_offset 81, -28
+ 541              		.cfi_offset 82, -24
+ 542              		.cfi_offset 83, -20
+ 543              		.cfi_offset 84, -16
+ 544              		.cfi_offset 85, -12
+ 545 0006 F0EE409A 		vmov.f32	s19, s0
+ 546 000a B0EE609A 		vmov.f32	s18, s1
+ 547 000e B0EE41AA 		vmov.f32	s20, s2
+ 548 0012 B0EE618A 		vmov.f32	s16, s3
+ 549 0016 F0EE42AA 		vmov.f32	s21, s4
+ 550 001a F0EE628A 		vmov.f32	s17, s5
+ 551 001e 0446     		mov	r4, r0
+  92:Algorithms/Filters/MahonyAHRS.c ****     float recipNorm;
+ 552              		.loc 1 92 5 is_stmt 1 view .LVU173
+  93:Algorithms/Filters/MahonyAHRS.c ****     float halfvx,halfvy,halfvz;
+ 553              		.loc 1 93 5 view .LVU174
+  94:Algorithms/Filters/MahonyAHRS.c ****     float halfex,halfey,halfez;
+ 554              		.loc 1 94 5 view .LVU175
+  95:Algorithms/Filters/MahonyAHRS.c ****     float qa,qb,qc;
+ 555              		.loc 1 95 5 view .LVU176
+  96:Algorithms/Filters/MahonyAHRS.c **** 
+  97:Algorithms/Filters/MahonyAHRS.c ****     if(!(ax == 0.0f && ay == 0.0f && az == 0.0f))
+ 556              		.loc 1 97 5 view .LVU177
+ 557              		.loc 1 97 13 is_stmt 0 view .LVU178
+ 558 0020 F5EE401A 		vcmp.f32	s3, #0
+ 559 0024 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 560 0028 14BF     		ite	ne
+ 561 002a 0123     		movne	r3, #1
+ 562 002c 0023     		moveq	r3, #0
+ 563              		.loc 1 97 27 view .LVU179
+ 564 002e B5EE402A 		vcmp.f32	s4, #0
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 13
+
+
+ 565 0032 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 566              		.loc 1 97 21 view .LVU180
+ 567 0036 18BF     		it	ne
+ 568 0038 43F00103 		orrne	r3, r3, #1
+ 569              		.loc 1 97 7 view .LVU181
+ 570 003c 23B9     		cbnz	r3, .L15
+ 571              		.loc 1 97 8 discriminator 1 view .LVU182
+ 572 003e F5EE402A 		vcmp.f32	s5, #0
+ 573 0042 F1EE10FA 		vmrs	APSR_nzcv, FPSCR
+ 574 0046 75D0     		beq	.L16
+ 575              	.L15:
+  98:Algorithms/Filters/MahonyAHRS.c ****     {
+  99:Algorithms/Filters/MahonyAHRS.c ****         recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+ 576              		.loc 1 99 9 is_stmt 1 view .LVU183
+ 577              		.loc 1 99 32 is_stmt 0 view .LVU184
+ 578 0048 68EE087A 		vmul.f32	s15, s16, s16
+ 579              		.loc 1 99 42 view .LVU185
+ 580 004c 2AEEAA7A 		vmul.f32	s14, s21, s21
+ 581              		.loc 1 99 37 view .LVU186
+ 582 0050 77EE877A 		vadd.f32	s15, s15, s14
+ 583              		.loc 1 99 52 view .LVU187
+ 584 0054 28EEA80A 		vmul.f32	s0, s17, s17
+ 585              	.LVL80:
+ 586              		.loc 1 99 21 view .LVU188
+ 587 0058 37EE800A 		vadd.f32	s0, s15, s0
+ 588 005c FFF7FEFF 		bl	invSqrt
+ 589              	.LVL81:
+ 100:Algorithms/Filters/MahonyAHRS.c ****         ax *= recipNorm;
+ 590              		.loc 1 100 9 is_stmt 1 view .LVU189
+ 591              		.loc 1 100 12 is_stmt 0 view .LVU190
+ 592 0060 28EE008A 		vmul.f32	s16, s16, s0
+ 593              	.LVL82:
+ 101:Algorithms/Filters/MahonyAHRS.c ****         ay *= recipNorm;
+ 594              		.loc 1 101 9 is_stmt 1 view .LVU191
+ 595              		.loc 1 101 12 is_stmt 0 view .LVU192
+ 596 0064 6AEE80AA 		vmul.f32	s21, s21, s0
+ 597              	.LVL83:
+ 102:Algorithms/Filters/MahonyAHRS.c ****         az *= recipNorm;
+ 598              		.loc 1 102 9 is_stmt 1 view .LVU193
+ 599              		.loc 1 102 12 is_stmt 0 view .LVU194
+ 600 0068 68EE808A 		vmul.f32	s17, s17, s0
+ 601              	.LVL84:
+ 103:Algorithms/Filters/MahonyAHRS.c **** 
+ 104:Algorithms/Filters/MahonyAHRS.c ****         halfvx = MahonyAHRS->q1 * MahonyAHRS->q3 - MahonyAHRS->q0 * MahonyAHRS->q2;
+ 602              		.loc 1 104 9 is_stmt 1 view .LVU195
+ 603              		.loc 1 104 28 is_stmt 0 view .LVU196
+ 604 006c D4ED016A 		vldr.32	s13, [r4, #4]
+ 605              		.loc 1 104 45 view .LVU197
+ 606 0070 94ED037A 		vldr.32	s14, [r4, #12]
+ 607              		.loc 1 104 33 view .LVU198
+ 608 0074 26EE876A 		vmul.f32	s12, s13, s14
+ 609              		.loc 1 104 62 view .LVU199
+ 610 0078 D4ED007A 		vldr.32	s15, [r4]
+ 611              		.loc 1 104 79 view .LVU200
+ 612 007c D4ED025A 		vldr.32	s11, [r4, #8]
+ 613              		.loc 1 104 67 view .LVU201
+ 614 0080 27EEA55A 		vmul.f32	s10, s15, s11
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 14
+
+
+ 615              		.loc 1 104 16 view .LVU202
+ 616 0084 36EE456A 		vsub.f32	s12, s12, s10
+ 617              	.LVL85:
+ 105:Algorithms/Filters/MahonyAHRS.c ****         halfvy = MahonyAHRS->q0 * MahonyAHRS->q1 + MahonyAHRS->q2 * MahonyAHRS->q3;
+ 618              		.loc 1 105 9 is_stmt 1 view .LVU203
+ 619              		.loc 1 105 33 is_stmt 0 view .LVU204
+ 620 0088 66EEA76A 		vmul.f32	s13, s13, s15
+ 621              		.loc 1 105 67 view .LVU205
+ 622 008c 67EE255A 		vmul.f32	s11, s14, s11
+ 623              		.loc 1 105 16 view .LVU206
+ 624 0090 76EEA56A 		vadd.f32	s13, s13, s11
+ 625              	.LVL86:
+ 106:Algorithms/Filters/MahonyAHRS.c ****         halfvz = MahonyAHRS->q0 * MahonyAHRS->q0 - 0.5f + MahonyAHRS->q3 * MahonyAHRS->q3;
+ 626              		.loc 1 106 9 is_stmt 1 view .LVU207
+ 627              		.loc 1 106 33 is_stmt 0 view .LVU208
+ 628 0094 67EEA77A 		vmul.f32	s15, s15, s15
+ 629              		.loc 1 106 50 view .LVU209
+ 630 0098 F6EE005A 		vmov.f32	s11, #5.0e-1
+ 631 009c 77EEE57A 		vsub.f32	s15, s15, s11
+ 632              		.loc 1 106 74 view .LVU210
+ 633 00a0 27EE077A 		vmul.f32	s14, s14, s14
+ 634              		.loc 1 106 16 view .LVU211
+ 635 00a4 77EE877A 		vadd.f32	s15, s15, s14
+ 636              	.LVL87:
+ 107:Algorithms/Filters/MahonyAHRS.c **** 
+ 108:Algorithms/Filters/MahonyAHRS.c ****         halfex = (ay * halfvz - az * halfvy);
+ 637              		.loc 1 108 9 is_stmt 1 view .LVU212
+ 638              		.loc 1 108 22 is_stmt 0 view .LVU213
+ 639 00a8 2AEEA77A 		vmul.f32	s14, s21, s15
+ 640              		.loc 1 108 36 view .LVU214
+ 641 00ac 68EEA65A 		vmul.f32	s11, s17, s13
+ 642              		.loc 1 108 16 view .LVU215
+ 643 00b0 37EE657A 		vsub.f32	s14, s14, s11
+ 644              	.LVL88:
+ 109:Algorithms/Filters/MahonyAHRS.c ****         halfey = (az * halfvx - ax * halfvz);
+ 645              		.loc 1 109 9 is_stmt 1 view .LVU216
+ 646              		.loc 1 109 22 is_stmt 0 view .LVU217
+ 647 00b4 68EE868A 		vmul.f32	s17, s17, s12
+ 648              	.LVL89:
+ 649              		.loc 1 109 36 view .LVU218
+ 650 00b8 68EE277A 		vmul.f32	s15, s16, s15
+ 651              	.LVL90:
+ 652              		.loc 1 109 16 view .LVU219
+ 653 00bc 78EEE78A 		vsub.f32	s17, s17, s15
+ 654              	.LVL91:
+ 110:Algorithms/Filters/MahonyAHRS.c ****         halfez = (ax * halfvy - ay * halfvx);
+ 655              		.loc 1 110 9 is_stmt 1 view .LVU220
+ 656              		.loc 1 110 22 is_stmt 0 view .LVU221
+ 657 00c0 28EE268A 		vmul.f32	s16, s16, s13
+ 658              	.LVL92:
+ 659              		.loc 1 110 36 view .LVU222
+ 660 00c4 6AEE86AA 		vmul.f32	s21, s21, s12
+ 661              	.LVL93:
+ 662              		.loc 1 110 16 view .LVU223
+ 663 00c8 38EE6A8A 		vsub.f32	s16, s16, s21
+ 664              	.LVL94:
+ 111:Algorithms/Filters/MahonyAHRS.c **** 
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 15
+
+
+ 112:Algorithms/Filters/MahonyAHRS.c ****         //启用积分项
+ 113:Algorithms/Filters/MahonyAHRS.c ****         if(Mahony_Ki >= 0.0f)
+ 665              		.loc 1 113 9 is_stmt 1 view .LVU224
+ 114:Algorithms/Filters/MahonyAHRS.c ****         {
+ 115:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_Bx += Mahony_Ki * halfex * MahonyAHRS->invSampleFreq;
+ 666              		.loc 1 115 13 view .LVU225
+ 667              		.loc 1 115 23 is_stmt 0 view .LVU226
+ 668 00cc 94ED046A 		vldr.32	s12, [r4, #16]
+ 669              	.LVL95:
+ 670              		.loc 1 115 53 view .LVU227
+ 671 00d0 9FED545A 		vldr.32	s10, .L18
+ 672              	.LVL96:
+ 673              		.loc 1 115 53 view .LVU228
+ 674 00d4 67EE057A 		vmul.f32	s15, s14, s10
+ 675              		.loc 1 115 74 view .LVU229
+ 676 00d8 D4ED085A 		vldr.32	s11, [r4, #32]
+ 677              		.loc 1 115 62 view .LVU230
+ 678 00dc 67EEA57A 		vmul.f32	s15, s15, s11
+ 679              		.loc 1 115 40 view .LVU231
+ 680 00e0 36EE276A 		vadd.f32	s12, s12, s15
+ 681 00e4 84ED046A 		vstr.32	s12, [r4, #16]
+ 116:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_By += Mahony_Ki * halfey * MahonyAHRS->invSampleFreq;
+ 682              		.loc 1 116 13 is_stmt 1 view .LVU232
+ 683              		.loc 1 116 23 is_stmt 0 view .LVU233
+ 684 00e8 D4ED056A 		vldr.32	s13, [r4, #20]
+ 685              	.LVL97:
+ 686              		.loc 1 116 53 view .LVU234
+ 687 00ec 68EE857A 		vmul.f32	s15, s17, s10
+ 688              		.loc 1 116 62 view .LVU235
+ 689 00f0 65EEA77A 		vmul.f32	s15, s11, s15
+ 690              		.loc 1 116 40 view .LVU236
+ 691 00f4 76EEA76A 		vadd.f32	s13, s13, s15
+ 692 00f8 C4ED056A 		vstr.32	s13, [r4, #20]
+ 117:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_Bz += Mahony_Ki * halfez * MahonyAHRS->invSampleFreq;
+ 693              		.loc 1 117 13 is_stmt 1 view .LVU237
+ 694              		.loc 1 117 23 is_stmt 0 view .LVU238
+ 695 00fc D4ED067A 		vldr.32	s15, [r4, #24]
+ 696              		.loc 1 117 53 view .LVU239
+ 697 0100 28EE055A 		vmul.f32	s10, s16, s10
+ 698              		.loc 1 117 62 view .LVU240
+ 699 0104 65EE855A 		vmul.f32	s11, s11, s10
+ 700              		.loc 1 117 40 view .LVU241
+ 701 0108 77EEA57A 		vadd.f32	s15, s15, s11
+ 702 010c C4ED067A 		vstr.32	s15, [r4, #24]
+ 118:Algorithms/Filters/MahonyAHRS.c ****             gx += MahonyAHRS->integralErr_Bx;
+ 703              		.loc 1 118 13 is_stmt 1 view .LVU242
+ 704              		.loc 1 118 16 is_stmt 0 view .LVU243
+ 705 0110 36EE296A 		vadd.f32	s12, s12, s19
+ 706              	.LVL98:
+ 119:Algorithms/Filters/MahonyAHRS.c ****             gy += MahonyAHRS->integralErr_By;
+ 707              		.loc 1 119 13 is_stmt 1 view .LVU244
+ 708              		.loc 1 119 16 is_stmt 0 view .LVU245
+ 709 0114 76EE896A 		vadd.f32	s13, s13, s18
+ 710              	.LVL99:
+ 120:Algorithms/Filters/MahonyAHRS.c ****             gz += MahonyAHRS->integralErr_Bz;
+ 711              		.loc 1 120 13 is_stmt 1 view .LVU246
+ 712              		.loc 1 120 16 is_stmt 0 view .LVU247
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 16
+
+
+ 713 0118 77EE8A7A 		vadd.f32	s15, s15, s20
+ 714              	.LVL100:
+ 121:Algorithms/Filters/MahonyAHRS.c ****         }else{
+ 122:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_Bx = 0.0f;
+ 123:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_By = 0.0f;
+ 124:Algorithms/Filters/MahonyAHRS.c ****             MahonyAHRS->integralErr_Bz = 0.0f;
+ 125:Algorithms/Filters/MahonyAHRS.c ****         }
+ 126:Algorithms/Filters/MahonyAHRS.c **** 
+ 127:Algorithms/Filters/MahonyAHRS.c ****         gx += Mahony_Kp * halfex;
+ 715              		.loc 1 127 9 is_stmt 1 view .LVU248
+ 716              		.loc 1 127 25 is_stmt 0 view .LVU249
+ 717 011c 37EE077A 		vadd.f32	s14, s14, s14
+ 718              	.LVL101:
+ 719              		.loc 1 127 12 view .LVU250
+ 720 0120 77EE069A 		vadd.f32	s19, s14, s12
+ 721              	.LVL102:
+ 128:Algorithms/Filters/MahonyAHRS.c ****         gy += Mahony_Kp * halfey;
+ 722              		.loc 1 128 9 is_stmt 1 view .LVU251
+ 723              		.loc 1 128 25 is_stmt 0 view .LVU252
+ 724 0124 78EEA88A 		vadd.f32	s17, s17, s17
+ 725              	.LVL103:
+ 726              		.loc 1 128 12 view .LVU253
+ 727 0128 38EEA69A 		vadd.f32	s18, s17, s13
+ 728              	.LVL104:
+ 129:Algorithms/Filters/MahonyAHRS.c ****         gz += Mahony_Kp * halfez;        
+ 729              		.loc 1 129 9 is_stmt 1 view .LVU254
+ 730              		.loc 1 129 25 is_stmt 0 view .LVU255
+ 731 012c 38EE088A 		vadd.f32	s16, s16, s16
+ 732              	.LVL105:
+ 733              		.loc 1 129 12 view .LVU256
+ 734 0130 38EE27AA 		vadd.f32	s20, s16, s15
+ 735              	.LVL106:
+ 736              	.L16:
+ 130:Algorithms/Filters/MahonyAHRS.c ****     }
+ 131:Algorithms/Filters/MahonyAHRS.c ****     //欧拉公式求解初值
+ 132:Algorithms/Filters/MahonyAHRS.c ****     gx *= (0.5f * MahonyAHRS->invSampleFreq);
+ 737              		.loc 1 132 5 is_stmt 1 view .LVU257
+ 738              		.loc 1 132 29 is_stmt 0 view .LVU258
+ 739 0134 D4ED087A 		vldr.32	s15, [r4, #32]
+ 740              		.loc 1 132 17 view .LVU259
+ 741 0138 B6EE007A 		vmov.f32	s14, #5.0e-1
+ 742 013c 67EE877A 		vmul.f32	s15, s15, s14
+ 743              		.loc 1 132 8 view .LVU260
+ 744 0140 27EEA90A 		vmul.f32	s0, s15, s19
+ 745              	.LVL107:
+ 133:Algorithms/Filters/MahonyAHRS.c ****     gy *= (0.5f * MahonyAHRS->invSampleFreq);
+ 746              		.loc 1 133 5 is_stmt 1 view .LVU261
+ 747              		.loc 1 133 8 is_stmt 0 view .LVU262
+ 748 0144 27EE899A 		vmul.f32	s18, s15, s18
+ 749              	.LVL108:
+ 134:Algorithms/Filters/MahonyAHRS.c ****     gz *= (0.5f * MahonyAHRS->invSampleFreq);
+ 750              		.loc 1 134 5 is_stmt 1 view .LVU263
+ 751              		.loc 1 134 8 is_stmt 0 view .LVU264
+ 752 0148 27EE8A1A 		vmul.f32	s2, s15, s20
+ 753              	.LVL109:
+ 135:Algorithms/Filters/MahonyAHRS.c ****     qa = MahonyAHRS->q0;
+ 754              		.loc 1 135 5 is_stmt 1 view .LVU265
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 17
+
+
+ 755              		.loc 1 135 8 is_stmt 0 view .LVU266
+ 756 014c D4ED004A 		vldr.32	s9, [r4]
+ 757              	.LVL110:
+ 136:Algorithms/Filters/MahonyAHRS.c ****     qb = MahonyAHRS->q1;
+ 758              		.loc 1 136 5 is_stmt 1 view .LVU267
+ 759              		.loc 1 136 8 is_stmt 0 view .LVU268
+ 760 0150 94ED015A 		vldr.32	s10, [r4, #4]
+ 761              	.LVL111:
+ 137:Algorithms/Filters/MahonyAHRS.c ****     qc = MahonyAHRS->q2;
+ 762              		.loc 1 137 5 is_stmt 1 view .LVU269
+ 763              		.loc 1 137 8 is_stmt 0 view .LVU270
+ 764 0154 D4ED025A 		vldr.32	s11, [r4, #8]
+ 765              	.LVL112:
+ 138:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q0 += (-qb * gx - qc * gy - MahonyAHRS->q3 * gz);
+ 766              		.loc 1 138 5 is_stmt 1 view .LVU271
+ 767              		.loc 1 138 28 is_stmt 0 view .LVU272
+ 768 0158 65EE407A 		vnmul.f32	s15, s10, s0
+ 769              		.loc 1 138 38 view .LVU273
+ 770 015c 29EE257A 		vmul.f32	s14, s18, s11
+ 771              		.loc 1 138 33 view .LVU274
+ 772 0160 77EEC77A 		vsub.f32	s15, s15, s14
+ 773              		.loc 1 138 55 view .LVU275
+ 774 0164 94ED036A 		vldr.32	s12, [r4, #12]
+ 775              		.loc 1 138 60 view .LVU276
+ 776 0168 26EE017A 		vmul.f32	s14, s12, s2
+ 777              		.loc 1 138 43 view .LVU277
+ 778 016c 77EEC77A 		vsub.f32	s15, s15, s14
+ 779              		.loc 1 138 20 view .LVU278
+ 780 0170 77EEA47A 		vadd.f32	s15, s15, s9
+ 781 0174 C4ED007A 		vstr.32	s15, [r4]
+ 139:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q1 += (qa * gx + qc * gz - MahonyAHRS->q3 * gy);
+ 782              		.loc 1 139 5 is_stmt 1 view .LVU279
+ 783              		.loc 1 139 27 is_stmt 0 view .LVU280
+ 784 0178 60EE246A 		vmul.f32	s13, s0, s9
+ 785              		.loc 1 139 37 view .LVU281
+ 786 017c 21EE257A 		vmul.f32	s14, s2, s11
+ 787              		.loc 1 139 32 view .LVU282
+ 788 0180 76EE876A 		vadd.f32	s13, s13, s14
+ 789              		.loc 1 139 59 view .LVU283
+ 790 0184 26EE097A 		vmul.f32	s14, s12, s18
+ 791              		.loc 1 139 42 view .LVU284
+ 792 0188 76EEC76A 		vsub.f32	s13, s13, s14
+ 793              		.loc 1 139 20 view .LVU285
+ 794 018c 76EE856A 		vadd.f32	s13, s13, s10
+ 795 0190 C4ED016A 		vstr.32	s13, [r4, #4]
+ 140:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q2 += (qa * gy - qb * gz + MahonyAHRS->q3 * gx);
+ 796              		.loc 1 140 5 is_stmt 1 view .LVU286
+ 797              		.loc 1 140 27 is_stmt 0 view .LVU287
+ 798 0194 29EE247A 		vmul.f32	s14, s18, s9
+ 799              		.loc 1 140 37 view .LVU288
+ 800 0198 21EE054A 		vmul.f32	s8, s2, s10
+ 801              		.loc 1 140 32 view .LVU289
+ 802 019c 37EE447A 		vsub.f32	s14, s14, s8
+ 803              		.loc 1 140 59 view .LVU290
+ 804 01a0 26EE004A 		vmul.f32	s8, s12, s0
+ 805              		.loc 1 140 42 view .LVU291
+ 806 01a4 37EE047A 		vadd.f32	s14, s14, s8
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 18
+
+
+ 807              		.loc 1 140 20 view .LVU292
+ 808 01a8 37EE257A 		vadd.f32	s14, s14, s11
+ 809 01ac 84ED027A 		vstr.32	s14, [r4, #8]
+ 141:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q3 += (qa * gz + qb * gy - qc * gx);
+ 810              		.loc 1 141 5 is_stmt 1 view .LVU293
+ 811              		.loc 1 141 27 is_stmt 0 view .LVU294
+ 812 01b0 21EE241A 		vmul.f32	s2, s2, s9
+ 813              	.LVL113:
+ 814              		.loc 1 141 37 view .LVU295
+ 815 01b4 29EE059A 		vmul.f32	s18, s18, s10
+ 816              	.LVL114:
+ 817              		.loc 1 141 32 view .LVU296
+ 818 01b8 31EE091A 		vadd.f32	s2, s2, s18
+ 819              		.loc 1 141 47 view .LVU297
+ 820 01bc 20EE250A 		vmul.f32	s0, s0, s11
+ 821              	.LVL115:
+ 822              		.loc 1 141 42 view .LVU298
+ 823 01c0 31EE401A 		vsub.f32	s2, s2, s0
+ 824              		.loc 1 141 20 view .LVU299
+ 825 01c4 36EE016A 		vadd.f32	s12, s12, s2
+ 826 01c8 84ED036A 		vstr.32	s12, [r4, #12]
+ 142:Algorithms/Filters/MahonyAHRS.c ****     //求范数，公式为1/sqrt(q0^2+q1^2+q2^2+q3^2)
+ 143:Algorithms/Filters/MahonyAHRS.c ****     recipNorm = invSqrt(MahonyAHRS->q0 * MahonyAHRS->q0 + MahonyAHRS->q1 * MahonyAHRS->q1 + MahonyA
+ 827              		.loc 1 143 5 is_stmt 1 view .LVU300
+ 828              		.loc 1 143 40 is_stmt 0 view .LVU301
+ 829 01cc 67EEA77A 		vmul.f32	s15, s15, s15
+ 830              		.loc 1 143 74 view .LVU302
+ 831 01d0 66EEA66A 		vmul.f32	s13, s13, s13
+ 832              		.loc 1 143 57 view .LVU303
+ 833 01d4 77EEA67A 		vadd.f32	s15, s15, s13
+ 834              		.loc 1 143 108 view .LVU304
+ 835 01d8 27EE077A 		vmul.f32	s14, s14, s14
+ 836              		.loc 1 143 91 view .LVU305
+ 837 01dc 77EE877A 		vadd.f32	s15, s15, s14
+ 838              		.loc 1 143 142 view .LVU306
+ 839 01e0 26EE066A 		vmul.f32	s12, s12, s12
+ 840              		.loc 1 143 17 view .LVU307
+ 841 01e4 37EE860A 		vadd.f32	s0, s15, s12
+ 842 01e8 FFF7FEFF 		bl	invSqrt
+ 843              	.LVL116:
+ 144:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q0 *= recipNorm;
+ 844              		.loc 1 144 5 is_stmt 1 view .LVU308
+ 845              		.loc 1 144 15 is_stmt 0 view .LVU309
+ 846 01ec D4ED007A 		vldr.32	s15, [r4]
+ 847              		.loc 1 144 20 view .LVU310
+ 848 01f0 67EE807A 		vmul.f32	s15, s15, s0
+ 849 01f4 C4ED007A 		vstr.32	s15, [r4]
+ 145:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q1 *= recipNorm;
+ 850              		.loc 1 145 5 is_stmt 1 view .LVU311
+ 851              		.loc 1 145 15 is_stmt 0 view .LVU312
+ 852 01f8 D4ED017A 		vldr.32	s15, [r4, #4]
+ 853              		.loc 1 145 20 view .LVU313
+ 854 01fc 67EE807A 		vmul.f32	s15, s15, s0
+ 855 0200 C4ED017A 		vstr.32	s15, [r4, #4]
+ 146:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q2 *= recipNorm;
+ 856              		.loc 1 146 5 is_stmt 1 view .LVU314
+ 857              		.loc 1 146 15 is_stmt 0 view .LVU315
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 19
+
+
+ 858 0204 D4ED027A 		vldr.32	s15, [r4, #8]
+ 859              		.loc 1 146 20 view .LVU316
+ 860 0208 67EE807A 		vmul.f32	s15, s15, s0
+ 861 020c C4ED027A 		vstr.32	s15, [r4, #8]
+ 147:Algorithms/Filters/MahonyAHRS.c ****     MahonyAHRS->q3 *= recipNorm;
+ 862              		.loc 1 147 5 is_stmt 1 view .LVU317
+ 863              		.loc 1 147 15 is_stmt 0 view .LVU318
+ 864 0210 D4ED037A 		vldr.32	s15, [r4, #12]
+ 865              		.loc 1 147 20 view .LVU319
+ 866 0214 67EE807A 		vmul.f32	s15, s15, s0
+ 867 0218 C4ED037A 		vstr.32	s15, [r4, #12]
+ 148:Algorithms/Filters/MahonyAHRS.c **** }
+ 868              		.loc 1 148 1 view .LVU320
+ 869 021c BDEC068B 		vldm	sp!, {d8-d10}
+ 870              	.LCFI8:
+ 871              		.cfi_restore 84
+ 872              		.cfi_restore 85
+ 873              		.cfi_restore 82
+ 874              		.cfi_restore 83
+ 875              		.cfi_restore 80
+ 876              		.cfi_restore 81
+ 877              		.cfi_def_cfa_offset 8
+ 878 0220 10BD     		pop	{r4, pc}
+ 879              	.LVL117:
+ 880              	.L19:
+ 881              		.loc 1 148 1 view .LVU321
+ 882 0222 00BF     		.align	2
+ 883              	.L18:
+ 884 0224 00000000 		.word	0
+ 885              		.cfi_endproc
+ 886              	.LFE3:
+ 888              		.section	.text.Mahony_computeAngles,"ax",%progbits
+ 889              		.align	1
+ 890              		.global	Mahony_computeAngles
+ 891              		.syntax unified
+ 892              		.thumb
+ 893              		.thumb_func
+ 895              	Mahony_computeAngles:
+ 896              	.LVL118:
+ 897              	.LFB4:
+ 149:Algorithms/Filters/MahonyAHRS.c **** 
+ 150:Algorithms/Filters/MahonyAHRS.c **** void Mahony_computeAngles(Mahony_t *M)
+ 151:Algorithms/Filters/MahonyAHRS.c **** {
+ 898              		.loc 1 151 1 is_stmt 1 view -0
+ 899              		.cfi_startproc
+ 900              		@ args = 0, pretend = 0, frame = 0
+ 901              		@ frame_needed = 0, uses_anonymous_args = 0
+ 902              		.loc 1 151 1 is_stmt 0 view .LVU323
+ 903 0000 10B5     		push	{r4, lr}
+ 904              	.LCFI9:
+ 905              		.cfi_def_cfa_offset 8
+ 906              		.cfi_offset 4, -8
+ 907              		.cfi_offset 14, -4
+ 908 0002 2DED088B 		vpush.64	{d8, d9, d10, d11}
+ 909              	.LCFI10:
+ 910              		.cfi_def_cfa_offset 40
+ 911              		.cfi_offset 80, -40
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 20
+
+
+ 912              		.cfi_offset 81, -36
+ 913              		.cfi_offset 82, -32
+ 914              		.cfi_offset 83, -28
+ 915              		.cfi_offset 84, -24
+ 916              		.cfi_offset 85, -20
+ 917              		.cfi_offset 86, -16
+ 918              		.cfi_offset 87, -12
+ 919 0006 0446     		mov	r4, r0
+ 152:Algorithms/Filters/MahonyAHRS.c ****     M->roll_Mahony = atan2f(M->q0 * M->q1 + M->q2 * M->q3, 0.5f - M->q1 * M->q1 - M->q2 * M->q2) * 
+ 920              		.loc 1 152 5 is_stmt 1 view .LVU324
+ 921              		.loc 1 152 30 is_stmt 0 view .LVU325
+ 922 0008 90ED009A 		vldr.32	s18, [r0]
+ 923              		.loc 1 152 38 view .LVU326
+ 924 000c 90ED018A 		vldr.32	s16, [r0, #4]
+ 925              		.loc 1 152 35 view .LVU327
+ 926 0010 29EE080A 		vmul.f32	s0, s18, s16
+ 927              		.loc 1 152 46 view .LVU328
+ 928 0014 D0ED029A 		vldr.32	s19, [r0, #8]
+ 929              		.loc 1 152 54 view .LVU329
+ 930 0018 D0ED038A 		vldr.32	s17, [r0, #12]
+ 931              		.loc 1 152 51 view .LVU330
+ 932 001c 69EEA87A 		vmul.f32	s15, s19, s17
+ 933              		.loc 1 152 73 view .LVU331
+ 934 0020 68EE080A 		vmul.f32	s1, s16, s16
+ 935              		.loc 1 152 65 view .LVU332
+ 936 0024 B6EE00AA 		vmov.f32	s20, #5.0e-1
+ 937 0028 7AEE600A 		vsub.f32	s1, s20, s1
+ 938              		.loc 1 152 89 view .LVU333
+ 939 002c 29EEA9BA 		vmul.f32	s22, s19, s19
+ 940              		.loc 1 152 22 view .LVU334
+ 941 0030 70EECB0A 		vsub.f32	s1, s1, s22
+ 942 0034 30EE270A 		vadd.f32	s0, s0, s15
+ 943 0038 FFF7FEFF 		bl	atan2f
+ 944              	.LVL119:
+ 945              		.loc 1 152 98 discriminator 1 view .LVU335
+ 946 003c DFED15AA 		vldr.32	s21, .L22
+ 947 0040 20EE2A0A 		vmul.f32	s0, s0, s21
+ 948              		.loc 1 152 20 discriminator 1 view .LVU336
+ 949 0044 84ED090A 		vstr.32	s0, [r4, #36]
+ 153:Algorithms/Filters/MahonyAHRS.c ****     M->pitch_Mahony = asinf(-2.0f * (M->q1 * M->q3 - M->q0 * M->q2)) * Mahony_RAD_TO_DEG;
+ 950              		.loc 1 153 5 is_stmt 1 view .LVU337
+ 951              		.loc 1 153 44 is_stmt 0 view .LVU338
+ 952 0048 68EE287A 		vmul.f32	s15, s16, s17
+ 953              		.loc 1 153 60 view .LVU339
+ 954 004c 29EE297A 		vmul.f32	s14, s18, s19
+ 955              		.loc 1 153 52 view .LVU340
+ 956 0050 77EEC77A 		vsub.f32	s15, s15, s14
+ 957              		.loc 1 153 23 view .LVU341
+ 958 0054 B8EE000A 		vmov.f32	s0, #-2.0e+0
+ 959 0058 27EE800A 		vmul.f32	s0, s15, s0
+ 960 005c FFF7FEFF 		bl	asinf
+ 961              	.LVL120:
+ 962              		.loc 1 153 70 discriminator 1 view .LVU342
+ 963 0060 20EE2A0A 		vmul.f32	s0, s0, s21
+ 964              		.loc 1 153 21 discriminator 1 view .LVU343
+ 965 0064 84ED0A0A 		vstr.32	s0, [r4, #40]
+ 154:Algorithms/Filters/MahonyAHRS.c ****     M->yaw_Mahony = atan2f(M->q1 * M->q2 + M->q0 * M->q3, 0.5f - M->q2 * M->q2 - M->q3 * M->q3) * M
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 21
+
+
+ 966              		.loc 1 154 5 is_stmt 1 view .LVU344
+ 967              		.loc 1 154 34 is_stmt 0 view .LVU345
+ 968 0068 28EE298A 		vmul.f32	s16, s16, s19
+ 969              		.loc 1 154 50 view .LVU346
+ 970 006c 29EE280A 		vmul.f32	s0, s18, s17
+ 971              		.loc 1 154 64 view .LVU347
+ 972 0070 7AEE4B0A 		vsub.f32	s1, s20, s22
+ 973              		.loc 1 154 88 view .LVU348
+ 974 0074 68EEA88A 		vmul.f32	s17, s17, s17
+ 975              		.loc 1 154 21 view .LVU349
+ 976 0078 70EEE80A 		vsub.f32	s1, s1, s17
+ 977 007c 38EE000A 		vadd.f32	s0, s16, s0
+ 978 0080 FFF7FEFF 		bl	atan2f
+ 979              	.LVL121:
+ 980              		.loc 1 154 97 discriminator 1 view .LVU350
+ 981 0084 20EE2A0A 		vmul.f32	s0, s0, s21
+ 982              		.loc 1 154 19 discriminator 1 view .LVU351
+ 983 0088 84ED0B0A 		vstr.32	s0, [r4, #44]
+ 155:Algorithms/Filters/MahonyAHRS.c **** }...
+ 984              		.loc 1 155 1 view .LVU352
+ 985 008c BDEC088B 		vldm	sp!, {d8-d11}
+ 986              	.LCFI11:
+ 987              		.cfi_restore 86
+ 988              		.cfi_restore 87
+ 989              		.cfi_restore 84
+ 990              		.cfi_restore 85
+ 991              		.cfi_restore 82
+ 992              		.cfi_restore 83
+ 993              		.cfi_restore 80
+ 994              		.cfi_restore 81
+ 995              		.cfi_def_cfa_offset 8
+ 996 0090 10BD     		pop	{r4, pc}
+ 997              	.LVL122:
+ 998              	.L23:
+ 999              		.loc 1 155 1 view .LVU353
+ 1000 0092 00BF     		.align	2
+ 1001              	.L22:
+ 1002 0094 E12E6542 		.word	1113927393
+ 1003              		.cfi_endproc
+ 1004              	.LFE4:
+ 1006              		.text
+ 1007              	.Letext0:
+ 1008              		.file 2 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/machine/_default_types.h"
+ 1009              		.file 3 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/sys/_stdint.h"
+ 1010              		.file 4 "Algorithms/Filters/MahonyAHRS.h"
+ 1011              		.file 5 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/math.h"
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s 			page 22
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 MahonyAHRS.c
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:20     .text.invSqrt:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:25     .text.invSqrt:00000000 invSqrt
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:71     .text.Mahony_invsqrt:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:77     .text.Mahony_invsqrt:00000000 Mahony_invsqrt
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:100    .text.MahonyAHRS_init:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:106    .text.MahonyAHRS_init:00000000 MahonyAHRS_init
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:512    .text.MahonyAHRS_init:00000224 $d
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:517    .text.MahonyAHRS_update:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:523    .text.MahonyAHRS_update:00000000 MahonyAHRS_update
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:884    .text.MahonyAHRS_update:00000224 $d
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:889    .text.Mahony_computeAngles:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:895    .text.Mahony_computeAngles:00000000 Mahony_computeAngles
+C:\Users\11464\AppData\Local\Temp\ccDZy3cN.s:1002   .text.Mahony_computeAngles:00000094 $d
+
+UNDEFINED SYMBOLS
+sqrtf
+atan2f
+sinf
+cosf
+asinf

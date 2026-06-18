@@ -1,0 +1,28 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "cwd": "${workspaceRoot}",
+            "executable": "./build/IMU.elf",
+            "name": "Debug with OpenOCD",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": [
+                "D:/ec_env/OpenOCD/share/openocd/scripts/interface/cmsis-dap.cfg",
+                "D:/ec_env/OpenOCD/share/openocd/scripts/target/stm32h7x.cfg",
+            ],
+            "serverpath":"D:/ec_env/OpenOCD/bin/openocd.exe",
+            "searchDir": [],
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none",
+            "gdbPath": "D:/ec_env/arm-gnu-toolchain/bin/arm-none-eabi-gdb.exe"
+        }
+
+
+    ]
+}

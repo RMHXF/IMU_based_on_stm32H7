@@ -1,0 +1,251 @@
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
+
+
+   1              		.cpu cortex-m7
+   2              		.arch armv7e-m
+   3              		.fpu fpv5-d16
+   4              		.eabi_attribute 28, 1
+   5              		.eabi_attribute 20, 1
+   6              		.eabi_attribute 21, 1
+   7              		.eabi_attribute 23, 3
+   8              		.eabi_attribute 24, 1
+   9              		.eabi_attribute 25, 1
+  10              		.eabi_attribute 26, 1
+  11              		.eabi_attribute 30, 1
+  12              		.eabi_attribute 34, 1
+  13              		.eabi_attribute 18, 4
+  14              		.file	"JF_protocol.c"
+  15              		.text
+  16              	.Ltext0:
+  17              		.cfi_sections	.debug_frame
+  18              		.file 1 "Device/USART/Src/JF_protocol.c"
+  19              		.section	.text.Tail_Init,"ax",%progbits
+  20              		.align	1
+  21              		.global	Tail_Init
+  22              		.syntax unified
+  23              		.thumb
+  24              		.thumb_func
+  26              	Tail_Init:
+  27              	.LVL0:
+  28              	.LFB144:
+   1:Device/USART/Src/JF_protocol.c **** #include "JF_protocol.h"
+   2:Device/USART/Src/JF_protocol.c **** #include "pid.h"
+   3:Device/USART/Src/JF_protocol.c **** void Tail_Init(justfloat_t *jf)
+   4:Device/USART/Src/JF_protocol.c **** {
+  29              		.loc 1 4 1 view -0
+  30              		.cfi_startproc
+  31              		@ args = 0, pretend = 0, frame = 0
+  32              		@ frame_needed = 0, uses_anonymous_args = 0
+  33              		@ link register save eliminated.
+   5:Device/USART/Src/JF_protocol.c ****     jf->tail.tail[0] = 0x00;
+  34              		.loc 1 5 5 view .LVU1
+  35              		.loc 1 5 22 is_stmt 0 view .LVU2
+  36 0000 0023     		movs	r3, #0
+  37 0002 0374     		strb	r3, [r0, #16]
+   6:Device/USART/Src/JF_protocol.c ****     jf->tail.tail[1] = 0x00;
+  38              		.loc 1 6 5 is_stmt 1 view .LVU3
+  39              		.loc 1 6 22 is_stmt 0 view .LVU4
+  40 0004 4374     		strb	r3, [r0, #17]
+   7:Device/USART/Src/JF_protocol.c ****     jf->tail.tail[2] = 0x80;
+  41              		.loc 1 7 5 is_stmt 1 view .LVU5
+  42              		.loc 1 7 22 is_stmt 0 view .LVU6
+  43 0006 8023     		movs	r3, #128
+  44 0008 8374     		strb	r3, [r0, #18]
+   8:Device/USART/Src/JF_protocol.c ****     jf->tail.tail[3] = 0x7F;
+  45              		.loc 1 8 5 is_stmt 1 view .LVU7
+  46              		.loc 1 8 22 is_stmt 0 view .LVU8
+  47 000a 7F23     		movs	r3, #127
+  48 000c C374     		strb	r3, [r0, #19]
+   9:Device/USART/Src/JF_protocol.c **** }
+  49              		.loc 1 9 1 view .LVU9
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 2
+
+
+  50 000e 7047     		bx	lr
+  51              		.cfi_endproc
+  52              	.LFE144:
+  54              		.section	.text.jf_transmit_buffer,"ax",%progbits
+  55              		.align	1
+  56              		.global	jf_transmit_buffer
+  57              		.syntax unified
+  58              		.thumb
+  59              		.thumb_func
+  61              	jf_transmit_buffer:
+  62              	.LVL1:
+  63              	.LFB145:
+  10:Device/USART/Src/JF_protocol.c **** 
+  11:Device/USART/Src/JF_protocol.c **** void jf_transmit_buffer(float channel,uint8_t *byte_packet)
+  12:Device/USART/Src/JF_protocol.c **** {
+  64              		.loc 1 12 1 is_stmt 1 view -0
+  65              		.cfi_startproc
+  66              		@ args = 0, pretend = 0, frame = 8
+  67              		@ frame_needed = 0, uses_anonymous_args = 0
+  68              		@ link register save eliminated.
+  69              		.loc 1 12 1 is_stmt 0 view .LVU11
+  70 0000 82B0     		sub	sp, sp, #8
+  71              	.LCFI0:
+  72              		.cfi_def_cfa_offset 8
+  73 0002 8DED010A 		vstr.32	s0, [sp, #4]
+  13:Device/USART/Src/JF_protocol.c ****     union{
+  74              		.loc 1 13 5 is_stmt 1 view .LVU12
+  14:Device/USART/Src/JF_protocol.c ****         float f;
+  15:Device/USART/Src/JF_protocol.c ****         uint32_t u;
+  16:Device/USART/Src/JF_protocol.c ****     }converter;
+  17:Device/USART/Src/JF_protocol.c ****     converter.f = channel;
+  75              		.loc 1 17 5 view .LVU13
+  18:Device/USART/Src/JF_protocol.c ****     uint32_t temp = converter.u;
+  76              		.loc 1 18 5 view .LVU14
+  77 0006 019B     		ldr	r3, [sp, #4]
+  78              	.LVL2:
+  19:Device/USART/Src/JF_protocol.c ****     byte_packet[0] = (uint8_t)temp;
+  79              		.loc 1 19 5 view .LVU15
+  80              		.loc 1 19 20 is_stmt 0 view .LVU16
+  81 0008 0370     		strb	r3, [r0]
+  20:Device/USART/Src/JF_protocol.c ****     byte_packet[1] = (uint8_t)(temp >> 8);
+  82              		.loc 1 20 5 is_stmt 1 view .LVU17
+  83              		.loc 1 20 22 is_stmt 0 view .LVU18
+  84 000a C3F30722 		ubfx	r2, r3, #8, #8
+  85              		.loc 1 20 20 view .LVU19
+  86 000e 4270     		strb	r2, [r0, #1]
+  21:Device/USART/Src/JF_protocol.c ****     byte_packet[2] = (uint8_t)(temp >> 16);
+  87              		.loc 1 21 5 is_stmt 1 view .LVU20
+  88              		.loc 1 21 22 is_stmt 0 view .LVU21
+  89 0010 C3F30742 		ubfx	r2, r3, #16, #8
+  90              		.loc 1 21 20 view .LVU22
+  91 0014 8270     		strb	r2, [r0, #2]
+  22:Device/USART/Src/JF_protocol.c ****     byte_packet[3] = (uint8_t)(temp >> 24);
+  92              		.loc 1 22 5 is_stmt 1 view .LVU23
+  93              		.loc 1 22 22 is_stmt 0 view .LVU24
+  94 0016 1B0E     		lsrs	r3, r3, #24
+  95              		.loc 1 22 20 view .LVU25
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 3
+
+
+  96 0018 C370     		strb	r3, [r0, #3]
+  23:Device/USART/Src/JF_protocol.c **** }
+  97              		.loc 1 23 1 view .LVU26
+  98 001a 02B0     		add	sp, sp, #8
+  99              	.LCFI1:
+ 100              		.cfi_def_cfa_offset 0
+ 101              		@ sp needed
+ 102 001c 7047     		bx	lr
+ 103              		.cfi_endproc
+ 104              	.LFE145:
+ 106              		.section	.text.Jf_transmit,"ax",%progbits
+ 107              		.align	1
+ 108              		.global	Jf_transmit
+ 109              		.syntax unified
+ 110              		.thumb
+ 111              		.thumb_func
+ 113              	Jf_transmit:
+ 114              	.LVL3:
+ 115              	.LFB146:
+  24:Device/USART/Src/JF_protocol.c **** 
+  25:Device/USART/Src/JF_protocol.c **** void Jf_transmit(justfloat_t *jf,float channel_1,float channel_2,float channel_3,float channel_4)
+  26:Device/USART/Src/JF_protocol.c **** {
+ 116              		.loc 1 26 1 is_stmt 1 view -0
+ 117              		.cfi_startproc
+ 118              		@ args = 0, pretend = 0, frame = 0
+ 119              		@ frame_needed = 0, uses_anonymous_args = 0
+ 120              		.loc 1 26 1 is_stmt 0 view .LVU28
+ 121 0000 10B5     		push	{r4, lr}
+ 122              	.LCFI2:
+ 123              		.cfi_def_cfa_offset 8
+ 124              		.cfi_offset 4, -8
+ 125              		.cfi_offset 14, -4
+ 126 0002 2DED048B 		vpush.64	{d8, d9}
+ 127              	.LCFI3:
+ 128              		.cfi_def_cfa_offset 24
+ 129              		.cfi_offset 80, -24
+ 130              		.cfi_offset 81, -20
+ 131              		.cfi_offset 82, -16
+ 132              		.cfi_offset 83, -12
+ 133 0006 0446     		mov	r4, r0
+ 134 0008 F0EE409A 		vmov.f32	s19, s0
+ 135 000c B0EE609A 		vmov.f32	s18, s1
+ 136 0010 F0EE418A 		vmov.f32	s17, s2
+ 137 0014 B0EE618A 		vmov.f32	s16, s3
+  27:Device/USART/Src/JF_protocol.c ****     Tail_Init(jf);
+ 138              		.loc 1 27 5 is_stmt 1 view .LVU29
+ 139 0018 FFF7FEFF 		bl	Tail_Init
+ 140              	.LVL4:
+  28:Device/USART/Src/JF_protocol.c ****     jf_transmit_buffer(channel_1,jf->channel[0]);
+ 141              		.loc 1 28 5 view .LVU30
+ 142 001c 2046     		mov	r0, r4
+ 143 001e B0EE690A 		vmov.f32	s0, s19
+ 144 0022 FFF7FEFF 		bl	jf_transmit_buffer
+ 145              	.LVL5:
+  29:Device/USART/Src/JF_protocol.c ****     jf_transmit_buffer(channel_2,jf->channel[1]);
+ 146              		.loc 1 29 5 view .LVU31
+ 147 0026 201D     		adds	r0, r4, #4
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 4
+
+
+ 148 0028 B0EE490A 		vmov.f32	s0, s18
+ 149 002c FFF7FEFF 		bl	jf_transmit_buffer
+ 150              	.LVL6:
+  30:Device/USART/Src/JF_protocol.c ****     jf_transmit_buffer(channel_3,jf->channel[2]);
+ 151              		.loc 1 30 5 view .LVU32
+ 152 0030 04F10800 		add	r0, r4, #8
+ 153 0034 B0EE680A 		vmov.f32	s0, s17
+ 154 0038 FFF7FEFF 		bl	jf_transmit_buffer
+ 155              	.LVL7:
+  31:Device/USART/Src/JF_protocol.c ****     jf_transmit_buffer(channel_4,jf->channel[3]);
+ 156              		.loc 1 31 5 view .LVU33
+ 157 003c 04F10C00 		add	r0, r4, #12
+ 158 0040 B0EE480A 		vmov.f32	s0, s16
+ 159 0044 FFF7FEFF 		bl	jf_transmit_buffer
+ 160              	.LVL8:
+  32:Device/USART/Src/JF_protocol.c ****     HAL_UART_Transmit_DMA(&huart1,(uint8_t*)jf,sizeof(justfloat_t));
+ 161              		.loc 1 32 5 view .LVU34
+ 162 0048 1422     		movs	r2, #20
+ 163 004a 2146     		mov	r1, r4
+ 164 004c 0248     		ldr	r0, .L6
+ 165 004e FFF7FEFF 		bl	HAL_UART_Transmit_DMA
+ 166              	.LVL9:
+  33:Device/USART/Src/JF_protocol.c **** }...
+ 167              		.loc 1 33 1 is_stmt 0 view .LVU35
+ 168 0052 BDEC048B 		vldm	sp!, {d8-d9}
+ 169              	.LCFI4:
+ 170              		.cfi_restore 82
+ 171              		.cfi_restore 83
+ 172              		.cfi_restore 80
+ 173              		.cfi_restore 81
+ 174              		.cfi_def_cfa_offset 8
+ 175              	.LVL10:
+ 176              		.loc 1 33 1 view .LVU36
+ 177 0056 10BD     		pop	{r4, pc}
+ 178              	.LVL11:
+ 179              	.L7:
+ 180              		.loc 1 33 1 view .LVU37
+ 181              		.align	2
+ 182              	.L6:
+ 183 0058 00000000 		.word	huart1
+ 184              		.cfi_endproc
+ 185              	.LFE146:
+ 187              		.text
+ 188              	.Letext0:
+ 189              		.file 2 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/machine/_default_types.h"
+ 190              		.file 3 "D:/ec_env/arm-gnu-toolchain/arm-none-eabi/include/sys/_stdint.h"
+ 191              		.file 4 "Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h723xx.h"
+ 192              		.file 5 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_def.h"
+ 193              		.file 6 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma.h"
+ 194              		.file 7 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h"
+ 195              		.file 8 "Device/USART/Inc/JF_protocol.h"
+ 196              		.file 9 "Core/Inc/usart.h"
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 5
+
+
+DEFINED SYMBOLS
+                            *ABS*:00000000 JF_protocol.c
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:20     .text.Tail_Init:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:26     .text.Tail_Init:00000000 Tail_Init
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:55     .text.jf_transmit_buffer:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:61     .text.jf_transmit_buffer:00000000 jf_transmit_buffer
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:107    .text.Jf_transmit:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:113    .text.Jf_transmit:00000000 Jf_transmit
+C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:183    .text.Jf_transmit:00000058 $d
+
+UNDEFINED SYMBOLS
+HAL_UART_Transmit_DMA
+huart1
