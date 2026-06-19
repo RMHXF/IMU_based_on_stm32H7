@@ -1,4 +1,4 @@
-ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccihAeWq.s 			page 1
 
 
    1              		.cpu cortex-m7
@@ -58,7 +58,7 @@ ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
   48 000c C374     		strb	r3, [r0, #19]
    9:Device/USART/Src/JF_protocol.c **** }
   49              		.loc 1 9 1 view .LVU9
-ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 2
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccihAeWq.s 			page 2
 
 
   50 000e 7047     		bx	lr
@@ -118,7 +118,7 @@ ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
   93              		.loc 1 22 22 is_stmt 0 view .LVU24
   94 0016 1B0E     		lsrs	r3, r3, #24
   95              		.loc 1 22 20 view .LVU25
-ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 3
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccihAeWq.s 			page 3
 
 
   96 0018 C370     		strb	r3, [r0, #3]
@@ -178,7 +178,7 @@ ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
   29:Device/USART/Src/JF_protocol.c ****     jf_transmit_buffer(channel_2,jf->channel[1]);
  146              		.loc 1 29 5 view .LVU31
  147 0026 201D     		adds	r0, r4, #4
-ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 4
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccihAeWq.s 			page 4
 
 
  148 0028 B0EE490A 		vmov.f32	s0, s18
@@ -196,12 +196,12 @@ ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
  158 0040 B0EE480A 		vmov.f32	s0, s16
  159 0044 FFF7FEFF 		bl	jf_transmit_buffer
  160              	.LVL8:
-  32:Device/USART/Src/JF_protocol.c ****     HAL_UART_Transmit_DMA(&huart1,(uint8_t*)jf,sizeof(justfloat_t));
+  32:Device/USART/Src/JF_protocol.c ****     HAL_UART_Transmit_IT(&huart1,(uint8_t*)jf,sizeof(justfloat_t));
  161              		.loc 1 32 5 view .LVU34
  162 0048 1422     		movs	r2, #20
  163 004a 2146     		mov	r1, r4
  164 004c 0248     		ldr	r0, .L6
- 165 004e FFF7FEFF 		bl	HAL_UART_Transmit_DMA
+ 165 004e FFF7FEFF 		bl	HAL_UART_Transmit_IT
  166              	.LVL9:
   33:Device/USART/Src/JF_protocol.c **** }...
  167              		.loc 1 33 1 is_stmt 0 view .LVU35
@@ -233,19 +233,19 @@ ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 1
  194              		.file 7 "Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h"
  195              		.file 8 "Device/USART/Inc/JF_protocol.h"
  196              		.file 9 "Core/Inc/usart.h"
-ARM GAS  C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s 			page 5
+ARM GAS  C:\Users\11464\AppData\Local\Temp\ccihAeWq.s 			page 5
 
 
 DEFINED SYMBOLS
                             *ABS*:00000000 JF_protocol.c
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:20     .text.Tail_Init:00000000 $t
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:26     .text.Tail_Init:00000000 Tail_Init
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:55     .text.jf_transmit_buffer:00000000 $t
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:61     .text.jf_transmit_buffer:00000000 jf_transmit_buffer
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:107    .text.Jf_transmit:00000000 $t
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:113    .text.Jf_transmit:00000000 Jf_transmit
-C:\Users\11464\AppData\Local\Temp\ccn3z0HD.s:183    .text.Jf_transmit:00000058 $d
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:20     .text.Tail_Init:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:26     .text.Tail_Init:00000000 Tail_Init
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:55     .text.jf_transmit_buffer:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:61     .text.jf_transmit_buffer:00000000 jf_transmit_buffer
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:107    .text.Jf_transmit:00000000 $t
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:113    .text.Jf_transmit:00000000 Jf_transmit
+C:\Users\11464\AppData\Local\Temp\ccihAeWq.s:183    .text.Jf_transmit:00000058 $d
 
 UNDEFINED SYMBOLS
-HAL_UART_Transmit_DMA
+HAL_UART_Transmit_IT
 huart1

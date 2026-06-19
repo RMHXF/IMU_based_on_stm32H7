@@ -38,11 +38,12 @@ float       gyro_init[3]  = {0};           /**< 陀螺仪三轴零偏值        
 pid_type_def pid_temp;                      /**< 温度PID控制器                 */
 justfloat_t IMU_jf;
 float       pid_temp_args[3] = {            /**< 温度PID参数 {Kp, Ki, Kd}      */
-    100.0f,                                 /**< 比例系数                      */
+    400.0f,                                 /**< 比例系数                      */
     50.0f,                                  /**< 积分系数                      */
     12.0f                                   /**< 微分系数                      */
 };
-
+float gyro_raw[3] = {0};                    /**< 陀螺仪原始数据缓存            */
+float gyro_sum[3] = {0};                    /**< 陀螺仪原始数据累加和缓存   */
 /*============================================================================
  * 调试标志
  *============================================================================*/
@@ -50,6 +51,8 @@ float       pid_temp_args[3] = {            /**< 温度PID参数 {Kp, Ki, Kd}   
 #if DEBUG
 int is_temp_err = 0;    /**< 温度异常标志（超温时置1） */
 int is_err      = 0;    /**< 传感器离线标志（初始化失败时置1） */
+float max_out1 = 8000.0f;
+float max_iout1 = 5500.0f;
 #endif
 
 /*============================================================================
@@ -73,8 +76,8 @@ void IMU_Task(void *argument)
     {
         osDelay(1);                         /* 1ms 周期 = 1kHz 控制/解算频率  */
         IMU_temp_Ctrl();                    /* 温度PID控制（内部300ms分频）    */
-        Gyro_Init(&Init_Status);            /* 陀螺仪零偏校准状态机           */
         IMU_Data_Read();                    /* 读取传感器 + Mahony姿态解算    */
+        Gyro_Init(&Init_Status);            /* 陀螺仪零偏校准状态机           */
     }
 }
 
@@ -94,17 +97,16 @@ void IMU_Task(void *argument)
 void IMU_Init(void)
 {
     /* ---- 初始化温度PID控制器 ---- */
-    PID_init(&pid_temp, PID_POSITION, pid_temp_args, 500.0f, 200.0f);
+    PID_init(&pid_temp, PID_POSITION, pid_temp_args, max_out1, max_iout1);
 
     /* ---- 启动加热PWM输出 ---- */
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
-    /* ---- 等待传感器上电稳定（2秒） ---- */
+    /* ---- 等待传感器上电稳定（3秒） ---- */
     osDelay(2000);
 
     /* ---- 配置Mahony滤波器采样频率 ---- */
     MahonyAHRS.invSampleFreq = 1 / 1000.0f;    /* 1kHz = 1ms 采样周期 */
-
     /* ---- BMI088在线检测 ---- */
     while (BMI088_init())
     {
@@ -178,7 +180,9 @@ void IMU_Data_Read(void)
 {
     /* ---- 读取BMI088原始数据 ---- */
     BMI088_read(IMU_Data.gyro, IMU_Data.accel, &IMU_Data.temp);
-
+    gyro_raw[0] = IMU_Data.gyro[0];
+    gyro_raw[1] = IMU_Data.gyro[1];
+    gyro_raw[2] = IMU_Data.gyro[2];
     /* ---- 首次调用时初始化Mahony姿态解算 ---- */
     if (MahonyAHRS.is_Init == 0)
     {
@@ -243,17 +247,17 @@ void Gyro_Init(uint8_t *status)
     if (*status == Gyro_Init_Flag)
     {
         /* ---- 校准阶段：累加原始陀螺仪数据 ---- */
-        gyro_init[0] += IMU_Data.gyro[0];
-        gyro_init[1] += IMU_Data.gyro[1];
-        gyro_init[2] += IMU_Data.gyro[2];
+        gyro_sum[0] += gyro_raw[0];
+        gyro_sum[1] += gyro_raw[1];
+        gyro_sum[2] += gyro_raw[2];
         cnt++;
 
         /* ---- 达到指定采样次数后计算零偏均值 ---- */
         if (cnt >= correct_Time_define)
         {
-            gyro_init[0] /= correct_Time_define;    /* X轴零偏均值              */
-            gyro_init[1] /= correct_Time_define;    /* Y轴零偏均值              */
-            gyro_init[2] /= correct_Time_define;    /* Z轴零偏均值              */
+            gyro_init[0] = gyro_sum[0] / correct_Time_define;    /* X轴零偏均值              */
+            gyro_init[1] = gyro_sum[1] / correct_Time_define;    /* Y轴零偏均值              */
+            gyro_init[2] = gyro_sum[2] / correct_Time_define;    /* Z轴零偏均值              */
             *status = Gyro_Read_Flag;               /* 切换至运行状态            */
         }
     }

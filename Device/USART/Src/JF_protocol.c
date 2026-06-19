@@ -29,5 +29,5 @@ void Jf_transmit(justfloat_t *jf,float channel_1,float channel_2,float channel_3
     jf_transmit_buffer(channel_2,jf->channel[1]);
     jf_transmit_buffer(channel_3,jf->channel[2]);
     jf_transmit_buffer(channel_4,jf->channel[3]);
-    HAL_UART_Transmit_DMA(&huart1,(uint8_t*)jf,sizeof(justfloat_t));
+    HAL_UART_Transmit_IT(&huart1,(uint8_t*)jf,sizeof(justfloat_t));
 }

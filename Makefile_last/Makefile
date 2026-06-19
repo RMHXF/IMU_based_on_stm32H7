@@ -96,6 +96,7 @@ Device/BMI088/Src/BMI088driver.c	 \
 Device/BMI088/Src/BMI088Middleware.c	\
 Algorithms/Control/pid.c	\
 Algorithms/Filters/MahonyAHRS.c	\
+Device/USART/Src/JF_protocol.c	\
 
 # ASM sources
 ASM_SOURCES =  \
@@ -188,6 +189,7 @@ C_INCLUDES =  \
 -IAlgorithms/Control	\
 -IAlgorithms/Filters	\
 -IMath	\
+-IDevice/USART/Inc	\
 
 
 # compile gcc flags
